@@ -7,6 +7,31 @@ const number=v=>new Intl.NumberFormat('it-IT').format(v);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let book=null,scope='choose',network='all',selectedSite='',selectedYear='',siteSearch='',focus='',tab='full-sal',term='',coefficient='',page=0,fileName='',review=new Map(),activeRows=[],currentRows=[];
 const PAGE=40;
+const REVIEW_STORAGE_KEY='salcheck-v2-practice-review-v1';
+const REVIEW_OPTIONS=['Da verificare','Lavoro eseguito','Acconto','Da escludere'];
+const REVIEW_EXCLUDES=new Set(['Acconto','Da escludere']);
+function isExcluded(r){return REVIEW_EXCLUDES.has(review.get(r.key))}
+function financialSummary(rows){
+ const totals=fx.summary(rows),eligible=fx.summary(rows.filter(r=>!isExcluded(r)));
+ const excludedFull=rows.filter(r=>r.fullSal&&isExcluded(r)).length;
+ const excludedPartial=rows.filter(r=>r.partial&&isExcluded(r)).length;
+ return {...totals,fullCount:eligible.fullCount,fullSal:eligible.fullSal,partialCount:eligible.partialCount,pMin:eligible.pMin,pMax:eligible.pMax,excludedFull,excludedPartial};
+}
+function reviewSignature(r){return [r.key,r.venduto,r.prodotto,r.fatturato,r.incassato].join('|')}
+function storedReviews(){try{return JSON.parse(window.localStorage.getItem(REVIEW_STORAGE_KEY)||'{}')||{}}catch(e){return {}}}
+function restoreReviews(rows){
+ const saved=storedReviews();review=new Map();
+ for(const r of rows){const value=saved[reviewSignature(r)];if(REVIEW_OPTIONS.includes(value)&&value!=='Da verificare')review.set(r.key,value)}
+}
+function saveReview(r,value){
+ if(!REVIEW_OPTIONS.includes(value))return;
+ if(value==='Da verificare')review.delete(r.key);else review.set(r.key,value);
+ try{
+  const stored=storedReviews(),key=reviewSignature(r);
+  if(value==='Da verificare')delete stored[key];else stored[key]=value;
+  window.localStorage.setItem(REVIEW_STORAGE_KEY,JSON.stringify(stored));
+ }catch(e){/* Private-browser mode: edits remain in memory and exports. */}
+}
 function err(t){$('error').hidden=!t;$('error').textContent=t||''}
 function loading(yes,message='',percentage=0){
  $('progress').hidden=!yes;$('progressText').textContent=message;$('progressBar').style.width=Math.min(100,Math.max(0,percentage))+'%';$('selectFile').disabled=yes;
@@ -34,7 +59,7 @@ function parse(file){
    try{
     const result=base.finalize(settings());
     if(!result.rows.length)throw Error('Non ho trovato pratiche con venduto positivo nel file.');
-    book={...result,sourceStore:base};fileName=file.name;review=new Map();network='all';scope='choose';selectedYear='';focus='';tab='full-sal';siteSearch='';term='';coefficient='';page=0;
+    book={...result,sourceStore:base};fileName=file.name;restoreReviews(result.rows);network='all';scope='choose';selectedYear='';focus='';tab='full-sal';siteSearch='';term='';coefficient='';page=0;
     $('networkFilter').value='all';$('siteFilter').value='';$('search').value='';$('coef').value='';
     renderYears();
     selectedSite='';renderAll();$('dashboard').hidden=false;
@@ -64,12 +89,12 @@ function renderAll(){
  const hasSelection=scope==='all'||Boolean(selectedSite);
  $('emptyState').hidden=hasSelection;$('results').hidden=!hasSelection;
  activeRows=scoped();const scopedSites=new Set(activeRows.map(x=>x.siteKey));
- const totals=fx.summary(activeRows);
+ const totals=financialSummary(activeRows);
  $('scopeDescription').textContent=scopedSites.size+' sedi con pratiche vendute · '+(network==='all'?'Dirette + franchising':network)+' · '+(selectedYear?'Anno delibera '+selectedYear:'Tutti gli anni');
  $('kPrat').textContent=number(totals.practices);$('kSold').textContent='Venduto '+euroC(totals.venduto);
  $('kPaid').textContent=number(totals.paid);$('kPaidInfo').textContent=number(totals.invoice)+' fatturate integralmente';
- $('kFull').textContent=euroC(totals.fullSal);$('kFullInfo').textContent=number(totals.fullCount)+' pratiche · fatturate e incassate';
- $('kPartial').textContent=totals.partialCount?euroC(totals.pMin)+' – '+euroC(totals.pMax):'0,00 €';$('kPartialInfo').textContent=number(totals.partialCount)+' pratiche · valori teorici';
+ $('kFull').textContent=euroC(totals.fullSal);$('kFullInfo').textContent=number(totals.fullCount)+' pratiche conteggiate'+(totals.excludedFull?' · '+number(totals.excludedFull)+' escluse/acconti':'')+' · netto revisioni';
+ $('kPartial').textContent=totals.partialCount?euroC(totals.pMin)+' – '+euroC(totals.pMax):'0,00 €';$('kPartialInfo').textContent=number(totals.partialCount)+' pratiche conteggiate'+(totals.excludedPartial?' · '+number(totals.excludedPartial)+' escluse/acconti':'')+' · valori teorici';
  let notices=[];
  if(totals.multiRows)notices.push(number(totals.multiRows)+' commesse con più righe economiche: i valori sono aggregati per codice e sede.');
  if(totals.possibleRepeats)notices.push(number(totals.possibleRepeats)+' commesse con righe economiche identiche: verifica l’eventuale duplicazione.');
@@ -88,7 +113,7 @@ function renderSiteSelection(){
 function renderSites(){
  const groups=new Map();
  for(const r of activeRows){if(!groups.has(r.siteKey))groups.set(r.siteKey,[]);groups.get(r.siteKey).push(r)}
- const list=[...groups.entries()].map(([key,rows])=>({key,site:rows[0].site,network:rows[0].network,t:fx.summary(rows)})).sort((a,b)=>b.t.fullSal-a.t.fullSal||b.t.pMax-a.t.pMax);
+ const list=[...groups.entries()].map(([key,rows])=>({key,site:rows[0].site,network:rows[0].network,t:financialSummary(rows)})).sort((a,b)=>b.t.fullSal-a.t.fullSal||b.t.pMax-a.t.pMax);
  $('siteTable').innerHTML=list.map(x=>'<tr data-focus="'+esc(x.key)+'" class="'+(focus===x.key?'active':'')+'"><td><span class="site-code">'+esc(x.site)+'</span></td><td><span class="pill '+(x.network==='IT-Franchising'?'fr':'')+'">'+(x.network==='IT-Franchising'?'Franchising':'Diretta')+'</span></td><td class="numeric">'+number(x.t.practices)+'</td><td class="numeric money-strong">'+euroC(x.t.fullSal)+' <span class="soft">('+number(x.t.fullCount)+')</span></td><td class="numeric money-secondary">'+(x.t.partialCount?euroC(x.t.pMin)+' – '+euroC(x.t.pMax):'—')+' <span class="soft">('+number(x.t.partialCount)+')</span></td><td class="numeric">'+number(x.t.unpaid+x.t.unmatched+x.t.possibleRepeats)+'</td></tr>').join('')||'<tr><td colspan="6" class="empty">Nessuna sede da mostrare</td></tr>';
 }
 const TAB_LABELS={
@@ -109,7 +134,7 @@ function currentDetail(){
 function moneyTd(c,strong){return '<td class="numeric '+(strong?'money-strong':'')+'">'+euroC(c)+'</td>'}
 function selectReview(r){
  let cur=review.get(r.key)||'Da verificare';
- return '<select class="review" data-review="'+esc(r.key)+'">'+['Da verificare','Lavoro eseguito','Acconto','Da escludere'].map(x=>'<option '+(cur===x?'selected':'')+'>'+esc(x)+'</option>').join('')+'</select>'
+ return '<select class="review" data-review="'+esc(r.key)+'" title="Acconto e Da escludere azzerano il contributo al SAL potenziale">'+REVIEW_OPTIONS.map(x=>'<option '+(cur===x?'selected':'')+'>'+esc(x)+'</option>').join('')+'</select>'
 }
 function renderDetails(){
  $('focusTag').hidden=!focus;$('clearFocus').hidden=!focus;
@@ -121,7 +146,7 @@ function renderDetails(){
  const ends=tab==='partial-sal'?['SAL minimo','SAL massimo','Regimi possibili','Verifica']:['Regime','SAL residuo','Righe','Verifica'];
  $('detailHead').innerHTML='<tr>'+[...c,...ends].map((x,i)=>'<th class="'+((i>=5&&i<=8||i===10||tab==='partial-sal'&&i===9)?'numeric':'')+'">'+x+'</th>').join('')+'</tr>';
  $('detailTable').innerHTML=currentRows.slice(page*PAGE,(page+1)*PAGE).map(r=>{
-  let h='<tr><td><strong>'+esc(r.code)+'</strong><div class="original">'+esc(r.address).slice(0,70)+'</div></td><td>'+esc(r.year||'—')+'</td><td>'+esc(r.site)+'</td><td>'+esc(r.network==='IT-Franchising'?'Franchising':'Diretta')+'</td><td>'+esc(r.state)+'</td>';
+  let h='<tr class="'+(isExcluded(r)?'review-excluded':'')+'"><td><strong>'+esc(r.code)+'</strong><div class="original">'+esc(r.address).slice(0,70)+'</div></td><td>'+esc(r.year||'—')+'</td><td>'+esc(r.site)+'</td><td>'+esc(r.network==='IT-Franchising'?'Franchising':'Diretta')+'</td><td>'+esc(r.state)+'</td>';
   h+=moneyTd(r.venduto)+moneyTd(r.prodotto)+moneyTd(r.fatturato)+moneyTd(r.incassato);
   if(tab==='partial-sal'){
     let details='<details class="detail"><summary>'+r.scenarios.length+' ipotesi</summary><div>'+r.scenarios.map(x=>esc(x.fx)+': imponibile '+euroC(x.base)+' → SAL '+euroC(x.gap)).join('<br>')+'</div></details>';
@@ -143,19 +168,22 @@ function exportRows(rows){return rows.map(r=>{
  'Venduto €':r.venduto/100,'Prodotto €':r.prodotto/100,'Fatturato netto €':r.fatturato/100,'Incassato €':r.incassato/100,
  'Regime compatibile':r.coefficient,'SAL venduto meno prodotto €':r.remaining/100,'SAL teorico min €':r.pMin/100,'SAL teorico max €':r.pMax/100,
  'Regimi teorici':r.scenarios.map(x=>x.fx).join(' / '),'Categoria':r.kind,'Righe aggregate':r.lines,'Righe economiche identiche':r.sameFinance?'Sì':'No',
- 'Revisione':review.get(r.key)||'Da verificare'};
+ 'Revisione':review.get(r.key)||'Da verificare','Escluso dal SAL potenziale':isExcluded(r)?'Sì':'No',
+ 'SAL conteggiato fatture complete €':r.fullSal&&!isExcluded(r)?r.remaining/100:0,
+ 'SAL conteggiato incassi parziali minimo €':r.partial&&!isExcluded(r)?r.pMin/100:0,
+ 'SAL conteggiato incassi parziali massimo €':r.partial&&!isExcluded(r)?r.pMax/100:0};
  for(const c of fx.FX){const x=r.scenarios.find(x=>x.fx===c.label);data['Base '+c.label+' €']=x?x.base/100:'';data['SAL '+c.label+' €']=x?x.gap/100:''}
  return data
 })}
 function summaryTable(){
  const by=new Map();
  for(const r of activeRows){if(!by.has(r.siteKey))by.set(r.siteKey,[]);by.get(r.siteKey).push(r)}
- return [...by.entries()].map(([key,rs])=>{const s=fx.summary(rs),r=rs[0];return {'Sede':r.site,'Rete':r.network,'Filtro anno':selectedYear||'Tutti gli anni','Pratiche vendute':s.practices,'Venduto €':s.venduto/100,'Prodotto €':s.prodotto/100,'Fatturato netto €':s.fatturato/100,'Incassato €':s.incassato/100,'Pratiche SAL completo':s.fullCount,'SAL fatture complete €':s.fullSal/100,'Pratiche SAL parziale':s.partialCount,'SAL parziale min €':s.pMin/100,'SAL parziale max €':s.pMax/100,'Anomalie codici ripetuti':s.possibleRepeats}}).sort((a,b)=>b['SAL fatture complete €']-a['SAL fatture complete €'])
+ return [...by.entries()].map(([key,rs])=>{const s=financialSummary(rs),r=rs[0];return {'Sede':r.site,'Rete':r.network,'Filtro anno':selectedYear||'Tutti gli anni','Pratiche vendute':s.practices,'Venduto €':s.venduto/100,'Prodotto €':s.prodotto/100,'Fatturato netto €':s.fatturato/100,'Incassato €':s.incassato/100,'Pratiche SAL completo':s.fullCount,'SAL fatture complete €':s.fullSal/100,'Pratiche SAL parziale':s.partialCount,'SAL parziale min €':s.pMin/100,'SAL parziale max €':s.pMax/100,'Escluse/acconti SAL completo':s.excludedFull,'Escluse/acconti SAL parziale':s.excludedPartial,'Anomalie codici ripetuti':s.possibleRepeats}}).sort((a,b)=>b['SAL fatture complete €']-a['SAL fatture complete €'])
 }
 function summaryYears(){
  const by=new Map();
  for(const r of activeRows){const key=r.year||'Anno non disponibile';if(!by.has(key))by.set(key,[]);by.get(key).push(r)}
- return [...by.entries()].map(([year,rows])=>{const t=fx.summary(rows);return {'Anno delibera':year,'Pratiche vendute':t.practices,'Venduto €':t.venduto/100,'Prodotto €':t.prodotto/100,'Fatturato netto €':t.fatturato/100,'Incassato €':t.incassato/100,'SAL su fatture complete €':t.fullSal/100,'Pratiche SAL fatture complete':t.fullCount,'SAL incassi parziali minimo €':t.pMin/100,'SAL incassi parziali massimo €':t.pMax/100,'Pratiche SAL incassi parziali':t.partialCount}})
+ return [...by.entries()].map(([year,rows])=>{const t=financialSummary(rows);return {'Anno delibera':year,'Pratiche vendute':t.practices,'Venduto €':t.venduto/100,'Prodotto €':t.prodotto/100,'Fatturato netto €':t.fatturato/100,'Incassato €':t.incassato/100,'SAL su fatture complete €':t.fullSal/100,'Pratiche SAL fatture complete':t.fullCount,'SAL incassi parziali minimo €':t.pMin/100,'SAL incassi parziali massimo €':t.pMax/100,'Pratiche SAL incassi parziali':t.partialCount,'Escluse/acconti SAL completo':t.excludedFull,'Escluse/acconti SAL parziale':t.excludedPartial}})
  .sort((a,b)=>String(a['Anno delibera']).localeCompare(String(b['Anno delibera'])));
 }
 function csvSafe(value){let s=String(value??'');if(/^[\s]*[=+\-@]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"'}
@@ -172,6 +200,7 @@ function downloadXlsx(){
   ['Riepilogo anni',summaryYears()],
   ['SAL fatture complete',exportRows(activeRows.filter(x=>x.fullSal))],
   ['SAL su incassi parziali',exportRows(activeRows.filter(x=>x.partial))],
+  ['Escluse e acconti',exportRows(activeRows.filter(x=>(x.fullSal||x.partial)&&isExcluded(x)))],
   ['Fatturate incassate',exportRows(activeRows.filter(x=>x.paid))],
   ['Fatturate non incassate',exportRows(activeRows.filter(x=>x.kind==='invoiced-unpaid'))],
   ['Non riconciliate',exportRows(activeRows.filter(x=>x.kind==='other'))],
@@ -201,6 +230,12 @@ $('search').oninput=e=>{term=e.target.value.toLowerCase();page=0;renderDetails()
 $('coef').onchange=e=>{coefficient=e.target.value;page=0;renderDetails()};
 $('prev').onclick=()=>{page=Math.max(0,page-1);renderDetails()};
 $('next').onclick=()=>{page++;renderDetails()};
-$('detailTable').onchange=e=>{const t=e.target.closest('select[data-review]');if(t)review.set(t.dataset.review,t.value)};
+$('detailTable').onchange=e=>{
+ const t=e.target.closest('select[data-review]');if(!t)return;
+ const r=book?.rows.find(row=>row.key===t.dataset.review);
+ if(!r)return;
+ saveReview(r,t.value);
+ renderAll();
+};
 $('exportCSV').onclick=downloadCSV;$('exportExcel').onclick=downloadXlsx;
 })();
