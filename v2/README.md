@@ -40,3 +40,9 @@ Il menu `Verifica` nel dettaglio delle pratiche comprende quattro stati:
 Il cambio di stato aggiorna immediatamente KPI, totali per sede, totali per anno e fogli di riepilogo Excel. **Non modifica** Venduto, Prodotto, Fatturato o Incassato e **non elimina la commessa** dal dettaglio: rimane visibile, evidenziata e auditabile. L'export contiene sia il SAL teorico originale sia il SAL conteggiato dopo le esclusioni; è presente anche il foglio `Escluse e acconti`.
 
 Le decisioni sono persistite esclusivamente nel `localStorage` del browser per combinazione di sede, codice pratica e quattro importi economici. Se gli importi cambiano su un export successivo, un'esclusione precedente non viene riapplicata automaticamente. Non esiste sincronizzazione fra browser, account o colleghi: per condividere le verifiche usare il report Excel.
+
+## Ordinamento e intestazioni
+
+Le colonne monetarie del **Dettaglio pratiche** (Venduto, Prodotto, Fatturato netto a pagare, Incassato e SAL residuo; nei casi parziali SAL minimo e SAL massimo) sono ordinate facendo clic sull'intestazione: primo clic crescente, secondo decrescente. Sono ordinate tramite il valore numerico, non la stringa formattata. La **Classifica sedi** supporta lo stesso comportamento su pratiche vendute, SAL fatture complete, SAL teorico massimo delle fatturazioni parziali e anomalie. L'ordinamento vale per tutte le pratiche filtrate, non soltanto per la pagina mostrata.
+
+La colonna visuale **Righe** è stata rimossa dal dettaglio pratiche per lasciare spazio ai valori economici. Le verifiche sulle righe duplicate restano operative nel motore e l'export audit continua a riportarne il numero. L'intestazione economica è ora **Fatturato netto a pagare**, coerentemente con il significato del dato esportato da Albert.
