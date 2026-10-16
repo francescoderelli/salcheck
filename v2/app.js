@@ -117,7 +117,7 @@ function renderDetails(){
  $('detailDescription').textContent=focus?'Dettaglio della sede '+idToCode(focus)+' · report identico alla V1':'Esamina le commesse della rete e verifica manualmente gli importi.';
  currentRows=currentDetail();const pages=Math.max(1,Math.ceil(currentRows.length/PAGE));page=Math.max(0,Math.min(page,pages-1));
  $('detailCount').textContent=number(currentRows.length)+' commesse';$('pageInfo').textContent=(page+1)+' / '+pages;$('prev').disabled=page===0;$('next').disabled=page>=pages-1;
- const c=['Commessa','Anno','Sede','Rete','Stato (info)','Venduto','Prodotto','Fatturato netto','Incassato'];
+ const c=['Commessa','Anno delibera','Sede','Rete','Stato (info)','Venduto','Prodotto','Fatturato netto','Incassato'];
  const ends=tab==='partial-sal'?['SAL minimo','SAL massimo','Regimi possibili','Verifica']:['Regime','SAL residuo','Righe','Verifica'];
  $('detailHead').innerHTML='<tr>'+[...c,...ends].map((x,i)=>'<th class="'+((i>=5&&i<=8||i===10||tab==='partial-sal'&&i===9)?'numeric':'')+'">'+x+'</th>').join('')+'</tr>';
  $('detailTable').innerHTML=currentRows.slice(page*PAGE,(page+1)*PAGE).map(r=>{
