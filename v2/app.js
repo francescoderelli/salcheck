@@ -34,7 +34,7 @@ function parse(file){
    try{
     const result=base.finalize(settings());
     if(!result.rows.length)throw Error('Non ho trovato pratiche con venduto positivo nel file.');
-    book=result;fileName=file.name;review=new Map();network='all';scope='test';focus='';tab='full-sal';siteSearch='';term='';coefficient='';page=0;
+    book={...result,sourceStore:base};fileName=file.name;review=new Map();network='all';scope='test';focus='';tab='full-sal';siteSearch='';term='';coefficient='';page=0;
     $('networkFilter').value='all';$('siteFilter').value='';$('search').value='';$('coef').value='';
     testSites=defaultTen();renderAll();$('dashboard').hidden=false;
     $('fileLabel').textContent=fileName+' · '+number(result.stats.allRows)+' righe lette · '+number(result.sites.length)+' codici sede';
@@ -133,8 +133,7 @@ function renderDetails(){
 }
 function recalculating(){
  if(!book)return;const data=settings();if(Object.values(data).some(x=>!Number.isFinite(x)||x<0)){err('Le tolleranze devono essere numeri non negativi.');return}
- // I dati grezzi sono mantenuti nel contenitore durante l'analisi; ricaricare il CSV per ricalcolare tutti i coefficienti.
- err('Per modificare le tolleranze è necessario ricaricare il CSV: il riepilogo corrente usa i parametri applicati durante l’importazione.');
+ const raw=book.sourceStore;book={...raw.finalize(data),sourceStore:raw};err('');page=0;renderAll();
 }
 function showScope(mode){scope=mode;focus='';page=0;renderAll()}
 function exportRows(rows){return rows.map(r=>{
