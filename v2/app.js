@@ -5,7 +5,7 @@ const $=id=>document.getElementById(id), fx=window.SALCore;
 const euroC=v=>new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR'}).format(v/100);
 const number=v=>new Intl.NumberFormat('it-IT').format(v);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let book=null,scope='choose',network='all',selectedSite='',selectedYear='',siteSearch='',focus='',tab='full-sal',term='',coefficient='',page=0,fileName='',review=new Map(),activeRows=[],currentRows=[],rowLookup=new Map(),detailSort={key:'',dir:'asc'},siteSort={key:'',dir:'asc'};
+let book=null,scope='choose',network='all',selectedSites=new Set(),selectedYear='',siteSearchTerm='',focus='',tab='full-sal',term='',coefficient='',page=0,fileName='',review=new Map(),activeRows=[],currentRows=[],rowLookup=new Map(),detailSort={key:'',dir:'asc'},siteSort={key:'',dir:'asc'};
 const PAGE=40;
 const REVIEW_STORAGE_KEY='salcheck-v2-practice-review-v1';
 const REVIEW_OPTIONS=['Da verificare','Lavoro eseguito','Acconto','Da escludere'];
@@ -59,10 +59,11 @@ function parse(file){
    try{
     const result=base.finalize(settings());
     if(!result.rows.length)throw Error('Non ho trovato pratiche con venduto positivo nel file.');
-    book={...result,sourceStore:base};rowLookup=new Map(result.rows.map(r=>[r.key,r]));fileName=file.name;restoreReviews(result.rows);network='all';scope='choose';selectedYear='';focus='';tab='full-sal';siteSearch='';term='';coefficient='';page=0;
-    $('networkFilter').value='all';$('siteFilter').value='';$('search').value='';$('coef').value='';
+    book={...result,sourceStore:base};rowLookup=new Map(result.rows.map(r=>[r.key,r]));fileName=file.name;restoreReviews(result.rows);network='all';scope='choose';selectedSites.clear();selectedYear='';siteSearchTerm='';focus='';tab='full-sal';term='';coefficient='';page=0;
+    $('networkFilter').value='all';$('siteSearchInput').value='';$('search').value='';$('coef').value='';
+    setPickerOpen(false);
     renderYears();
-    selectedSite='';renderAll();$('dashboard').hidden=false;
+    renderAll();$('dashboard').hidden=false;
     $('fileLabel').textContent=fileName+' · '+number(result.stats.allRows)+' righe lette · '+number(result.sites.length)+' codici sede';
     $('inputInfo').textContent=number(file.size/1024/1024|0)+' MB · '+number(result.stats.allRows)+' righe · '+number(result.sites.length)+' sedi';
     loading(false);
@@ -79,14 +80,14 @@ function renderYears(){
  $('yearInfo').textContent=years.length?'Anni delibera nel file: '+years.slice().reverse().join(' · '):'Anno non disponibile nell’export';
 }
 function keepSite(s){
- return (scope==='all'||selectedSite===s.key)&&(network==='all'||s.network===network)&&(!siteSearch||s.code.toLowerCase().includes(siteSearch.toLowerCase()));
+ return (scope==='all'||selectedSites.has(s.key))&&(network==='all'||s.network===network);
 }
 function scoped(){const ids=new Set(book.sites.filter(keepSite).map(s=>s.key));return book.rows.filter(x=>ids.has(x.siteKey)&&(!selectedYear||x.year===selectedYear))}
 function renderAll(){
  if(!book)return;
  document.querySelectorAll('[data-scope]').forEach(el=>el.classList.toggle('on',el.dataset.scope===scope));
  $('siteSelection').hidden=scope!=='choose';
- const hasSelection=scope==='all'||Boolean(selectedSite);
+ const hasSelection=scope==='all'||selectedSites.size>0;
  $('emptyState').hidden=hasSelection;$('results').hidden=!hasSelection;
  activeRows=scoped();const scopedSites=new Set(activeRows.map(x=>x.siteKey));
  const totals=financialSummary(activeRows);
@@ -103,11 +104,30 @@ function renderAll(){
  $('alerts').hidden=!notices.length;$('alerts').textContent=notices.join(' ');
  renderSiteSelection();renderSites();renderTabs();renderDetails();
 }
+function pickerSiteOptions(){
+ if(!book)return;
+ const query=siteSearchTerm.trim().toLocaleLowerCase('it');
+ const sites=book.sites.filter(s=>s.withSale>0&&(network==='all'||s.network===network))
+ .filter(s=>!query||s.code.toLocaleLowerCase('it').includes(query)||s.network.toLocaleLowerCase('it').includes(query))
+ .sort((a,b)=>a.code.localeCompare(b.code)||a.network.localeCompare(b.network));
+ $('siteOptions').innerHTML=sites.map(s=>'<label class="picker-option"><input type="checkbox" data-site="'+encodeURIComponent(s.key)+'" '+(selectedSites.has(s.key)?'checked':'')+
+ '><span class="picker-code">'+esc(s.code)+'</span><span class="picker-network">'+esc(s.network==='IT-Franchising'?'Franchising':'Diretta')+'</span></label>').join('')
+ ||'<p class="picker-no-results">Nessuna sede trovata. Prova un altro codice.</p>';
+ $('siteMatchCount').textContent=number(sites.length)+(sites.length===1?' sede trovata':' sedi trovate');
+}
+function setPickerOpen(open){
+ $('sitePickerPanel').hidden=!open;
+ $('sitePickerToggle').setAttribute('aria-expanded',open?'true':'false');
+ if(open){pickerSiteOptions();$('siteSearchInput').focus()}
+}
 function renderSiteSelection(){
- const arr=book.sites.filter(s=>s.withSale>0&&(network==='all'||s.network===network)).sort((a,b)=>a.code.localeCompare(b.code)||a.network.localeCompare(b.network));
- $('chosenSite').innerHTML='<option value="">— Seleziona una sede —</option>'+arr.map(s=>'<option value="'+encodeURIComponent(s.key)+'">'+esc(s.code)+' · '+esc(s.network==='IT-Franchising'?'Franchising':'Diretta')+'</option>').join('');
- $('chosenSite').value=arr.some(s=>s.key===selectedSite)?encodeURIComponent(selectedSite):'';
- $('chosenHint').textContent=selectedSite?'Report della sede selezionata. Puoi cambiare sede in qualsiasi momento.':arr.length+' sedi disponibili. Nessuna selezione predefinita.';
+ const chosen=[...selectedSites].map(key=>book.sites.find(s=>s.key===key)).filter(Boolean)
+ .sort((a,b)=>a.code.localeCompare(b.code)||a.network.localeCompare(b.network));
+ $('selectedCount').textContent='('+number(chosen.length)+(chosen.length===1?' selezionata)':' selezionate)');
+ $('sitePickerLabel').textContent=chosen.length?number(chosen.length)+(chosen.length===1?' sede selezionata · cerca per aggiungerne altre':' sedi selezionate · cerca per aggiungerne altre'):'Cerca e seleziona le sedi…';
+ $('selectedChips').innerHTML=chosen.map(s=>'<button class="selected-chip" type="button" data-remove-site="'+encodeURIComponent(s.key)+'" title="Rimuovi '+esc(s.code)+'" aria-label="Rimuovi '+esc(s.code)+'">'+esc(s.code)+' <span aria-hidden="true">×</span></button>').join('');
+ $('chosenHint').textContent=chosen.length?'Il report somma solo le sedi selezionate'+(network!=='all'?' appartenenti alla rete filtrata':'')+'. Puoi aggiungerne o rimuoverne altre.':'Apri il menu, cerca e spunta le sedi da analizzare insieme.';
+ pickerSiteOptions();
 }
 
 function renderSites(){
@@ -160,6 +180,7 @@ function selectReview(r){
 }
 function renderDetails(){
  $('focusTag').hidden=!focus;$('clearFocus').hidden=!focus;
+ $('clearFocus').textContent=scope==='all'?'← Torna a tutte le sedi':'← Torna alle sedi selezionate';
  $('focusTag').textContent=focus?'Solo '+idToCode(focus):'';
  $('detailDescription').textContent=focus?'Dettaglio della sede '+idToCode(focus)+' · report identico alla V1':'Esamina le commesse della rete e verifica manualmente gli importi.';
  const validSortKeys=tab==='partial-sal'?['venduto','prodotto','fatturato','incassato','pMin','pMax']:['venduto','prodotto','fatturato','incassato','remaining'];
@@ -252,11 +273,27 @@ $('drop').ondragover=()=>{$('drop').classList.add('dragging')};
 $('drop').ondragleave=()=>{$('drop').classList.remove('dragging')};
 $('drop').ondrop=e=>{$('drop').classList.remove('dragging');parse(e.dataTransfer.files[0])};
 document.querySelectorAll('[data-scope]').forEach(b=>b.onclick=()=>showScope(b.dataset.scope));
-$('networkFilter').onchange=e=>{network=e.target.value;selectedSite='';focus='';page=0;renderAll()};
+$('networkFilter').onchange=e=>{network=e.target.value;focus='';page=0;renderAll()};
 $('yearFilter').onchange=e=>{selectedYear=e.target.value;focus='';page=0;renderAll()};
-$('siteFilter').oninput=e=>{siteSearch=e.target.value.trim();focus='';page=0;renderAll()};
-$('clearSite').onclick=()=>{selectedSite='';focus='';page=0;renderAll()};
-$('chosenSite').onchange=e=>{selectedSite=e.target.value?decodeURIComponent(e.target.value):'';focus='';page=0;renderAll()};
+$('clearSite').onclick=()=>{selectedSites.clear();focus='';page=0;renderAll()};
+$('sitePickerToggle').onclick=()=>setPickerOpen($('sitePickerPanel').hidden);
+$('siteSearchInput').oninput=e=>{siteSearchTerm=e.target.value;pickerSiteOptions()};
+$('siteOptions').onchange=e=>{
+ const input=e.target.closest('input[data-site]');if(!input)return;
+ const key=decodeURIComponent(input.dataset.site);
+ if(input.checked)selectedSites.add(key);else selectedSites.delete(key);
+ focus='';page=0;renderAll();
+};
+$('selectedChips').onclick=e=>{
+ const chip=e.target.closest('button[data-remove-site]');if(!chip)return;
+ selectedSites.delete(decodeURIComponent(chip.dataset.removeSite));
+ focus='';page=0;renderAll();
+};
+document.addEventListener('click',e=>{
+ if(!$('multiPicker').contains(e.target))setPickerOpen(false);
+});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('sitePickerPanel').hidden){setPickerOpen(false);$('sitePickerToggle').focus()}});
+
 $('recalculate').onclick=recalculating;
 $('siteTable').onclick=e=>{const tr=e.target.closest('tr[data-focus]');if(!tr)return;focus=tr.dataset.focus;tab='full-sal';page=0;term='';coefficient='';$('search').value='';$('coef').value='';renderSites();renderTabs();renderDetails();$('tabs').scrollIntoView({behavior:'smooth',block:'start'})};
 $('siteHead').onclick=e=>{
