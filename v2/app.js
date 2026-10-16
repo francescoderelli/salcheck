@@ -77,7 +77,7 @@ function settings(){return {invoiceTolerance:Number($('tolInvoice').value),cashT
 function renderFileScope(){
  const stats=book.stats,areas=stats.macroareas||[];
  $('fileMacroareas').textContent=!stats.macroareaColumnPresent?'Campo macroarea non presente':
-  areas.length?areas.map(a=>a.name+' ('+number(a.count)+' righe)').join(' · '):'Nessuna macroarea rilevata';
+  areas.length?areas.map(a=>a.name+' ('+number(a.count)+(a.count===1?' riga':' righe')+')').join(' · '):'Nessuna macroarea rilevata';
  $('fileScopeNote').textContent=stats.macroareaColumnPresent
   ?'Perimetro reale del file importato · '+number(stats.allRows)+' righe lette. La presenza di più macroaree non garantisce, da sola, che siano comprese tutte le sedi italiane.'
   :'Questo export non permette di identificare le macroaree: controlla il filtro della dashboard prima di confrontare i totali nazionali.';
