@@ -162,6 +162,8 @@ function renderDetails(){
  $('focusTag').hidden=!focus;$('clearFocus').hidden=!focus;
  $('focusTag').textContent=focus?'Solo '+idToCode(focus):'';
  $('detailDescription').textContent=focus?'Dettaglio della sede '+idToCode(focus)+' · report identico alla V1':'Esamina le commesse della rete e verifica manualmente gli importi.';
+ const validSortKeys=tab==='partial-sal'?['venduto','prodotto','fatturato','incassato','pMin','pMax']:['venduto','prodotto','fatturato','incassato','remaining'];
+ if(detailSort.key&&!validSortKeys.includes(detailSort.key))detailSort={key:'',dir:'asc'};
  currentRows=currentDetail();const pages=Math.max(1,Math.ceil(currentRows.length/PAGE));page=Math.max(0,Math.min(page,pages-1));
  $('detailCount').textContent=number(currentRows.length)+' commesse'+(currentRows.some(isExcluded)?' · '+number(currentRows.filter(isExcluded).length)+' escluse/acconti, ancora visibili':'');$('pageInfo').textContent=(page+1)+' / '+pages;$('prev').disabled=page===0;$('next').disabled=page>=pages-1;
  const headers=[
@@ -172,8 +174,6 @@ function renderDetails(){
   [{label:'Regime'},{label:'SAL residuo',key:'remaining'},{label:'Verifica'}])
  ];
  if(tab==='partial-sal')headers.push({label:'Verifica'});
- const validKeys=headers.filter(x=>x.key).map(x=>x.key);
- if(detailSort.key&&!validKeys.includes(detailSort.key))detailSort={key:'',dir:'asc'};
  $('detailHead').innerHTML='<tr>'+headers.map(x=>{
   if(!x.key)return '<th>'+esc(x.label)+'</th>';
   const selected=detailSort.key===x.key,arrow=selected?(detailSort.dir==='asc'?'↑':'↓'):'↕';
@@ -191,7 +191,7 @@ function renderDetails(){
     +'<td>'+selectReview(r)+'</td>';
   }
   return h+'</tr>'
- }).join('')||'<tr><td colspan="12" class="empty">Nessuna pratica nei filtri selezionati.</td></tr>';
+ }).join('')||'<tr><td colspan="'+(tab==='partial-sal'?13:12)+'" class="empty">Nessuna pratica nei filtri selezionati.</td></tr>';
 }
 function recalculating(){
  if(!book)return;const data=settings();if(Object.values(data).some(x=>!Number.isFinite(x)||x<0)){err('Le tolleranze devono essere numeri non negativi.');return}
