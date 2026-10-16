@@ -59,3 +59,11 @@ SALCheck visualizza sempre, sopra i filtri e anche con nessuna sede selezionata,
 
 ## Filtro macroarea
 Il filtro **Macroarea** offre sempre `Tutte le macroaree`, `Nord`, `Centro`, `Sud`, `N/A` e `Non indicata`, oltre a eventuali codifiche aggiuntive presenti nell'export. `N/A` (valore esplicito) e `Non indicata` (campo vuoto o non presente) sono mantenute come categorie distinte. Filtra i record economici per macroarea e, in combinazione con sede, rete e anno di delibera, aggiorna il cruscotto, la classifica sedi, i dettagli ed entrambi gli export. L'indicazione in alto delle macroaree presenti nel CSV rimane sempre riferita **all'intero file**, non cambia con i filtri. Le sedi selezionate restano memorizzate quando si cambia filtro: una sede di altra macroarea potrebbe momentaneamente non contribuire al totale.
+
+## Simulazione del regime SAL su incassi parziali
+
+Nel tab **SAL incassi parziali** ogni commessa presenta un menu `Regime da simulare` con le sole ipotesi compatibili calcolate dal motore (100%, 106%, 110%, 118%, 122% secondo il fatturato/incassato). Le opzioni mostrano in anteprima il corrispondente SAL teorico. Se non è stato scelto un regime, la riga mostra l'intervallo minimo–massimo; dopo la selezione mostra **solo il regime scelto e il suo SAL simulato**. È possibile tornare a `Da simulare (intervallo)` per annullare la scelta. Questo non cambia il regime reale di fatturazione, che deve essere confermato.
+
+La selezione aggiorna in tempo reale i totali SAL per sede e per l'intero perimetro. I valori delle pratiche senza regime scelto contribuiscono come intervallo; quelli con regime scelto contribuiscono con il singolo importo. Quando non rimangono incertezze, il KPI mostra un importo unico. `Acconto` e `Da escludere` continuano a sottrarre la pratica dal totale e dalla somma simulata; se un regime scelto produce SAL pari a zero, il contributo è zero ma la pratica resta visibile nel tab per poter rivedere la decisione. Nell'Excel sono aggiunte `Regime simulato`, `SAL simulato €` e gli importi conteggiati dopo simulazione, mentre le ipotesi originarie restano nei dati di audit.
+
+Il regime scelto viene mantenuto nel browser tramite `localStorage`, associato a rete, sede, codice pratica e quattro importi economici. I dati non vengono caricati su server; le scelte non sono condivise automaticamente tra colleghi.
