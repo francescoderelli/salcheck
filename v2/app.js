@@ -51,7 +51,7 @@ function renderYears(){
  const years=[...new Set(book.rows.map(x=>x.year).filter(Boolean))].sort((a,b)=>b.localeCompare(a));
  $('yearFilter').innerHTML='<option value="">Tutti gli anni</option>'+years.map(y=>'<option value="'+esc(y)+'">'+esc(y)+'</option>').join('');
  $('yearFilter').value=selectedYear;
- $('yearInfo').textContent=years.length?'Anni nel file: '+years.slice().reverse().join(' · '):'Anno non disponibile nell’export';
+ $('yearInfo').textContent=years.length?'Anni delibera nel file: '+years.slice().reverse().join(' · '):'Anno non disponibile nell’export';
 }
 function keepSite(s){
  return (scope==='all'||selectedSite===s.key)&&(network==='all'||s.network===network)&&(!siteSearch||s.code.toLowerCase().includes(siteSearch.toLowerCase()));
@@ -65,7 +65,7 @@ function renderAll(){
  $('emptyState').hidden=hasSelection;$('results').hidden=!hasSelection;
  activeRows=scoped();const scopedSites=new Set(activeRows.map(x=>x.siteKey));
  const totals=fx.summary(activeRows);
- $('scopeDescription').textContent=scopedSites.size+' sedi con pratiche vendute · '+(network==='all'?'Dirette + franchising':network)+' · '+(selectedYear?'Anno pratica '+selectedYear:'Tutti gli anni');
+ $('scopeDescription').textContent=scopedSites.size+' sedi con pratiche vendute · '+(network==='all'?'Dirette + franchising':network)+' · '+(selectedYear?'Anno delibera '+selectedYear:'Tutti gli anni');
  $('kPrat').textContent=number(totals.practices);$('kSold').textContent='Venduto '+euroC(totals.venduto);
  $('kPaid').textContent=number(totals.paid);$('kPaidInfo').textContent=number(totals.invoice)+' fatturate integralmente';
  $('kFull').textContent=euroC(totals.fullSal);$('kFullInfo').textContent=number(totals.fullCount)+' pratiche · fatturate e incassate';
@@ -139,7 +139,7 @@ function recalculating(){
 }
 function showScope(mode){scope=mode;focus='';page=0;renderAll()}
 function exportRows(rows){return rows.map(r=>{
- const data={'Commessa':r.code,'Anno creazione pratica':r.year,'Sede':r.site,'Rete':r.network,'Società':r.company,'Macroarea':r.area,'Stato (informativo)':r.state,'Indirizzo':r.address,
+ const data={'Commessa':r.code,'Anno delibera':r.year,'Sede':r.site,'Rete':r.network,'Società':r.company,'Macroarea':r.area,'Stato (informativo)':r.state,'Indirizzo':r.address,
  'Venduto €':r.venduto/100,'Prodotto €':r.prodotto/100,'Fatturato netto €':r.fatturato/100,'Incassato €':r.incassato/100,
  'Regime compatibile':r.coefficient,'SAL venduto meno prodotto €':r.remaining/100,'SAL teorico min €':r.pMin/100,'SAL teorico max €':r.pMax/100,
  'Regimi teorici':r.scenarios.map(x=>x.fx).join(' / '),'Categoria':r.kind,'Righe aggregate':r.lines,'Righe economiche identiche':r.sameFinance?'Sì':'No',
@@ -155,8 +155,8 @@ function summaryTable(){
 function summaryYears(){
  const by=new Map();
  for(const r of activeRows){const key=r.year||'Anno non disponibile';if(!by.has(key))by.set(key,[]);by.get(key).push(r)}
- return [...by.entries()].map(([year,rows])=>{const t=fx.summary(rows);return {'Anno creazione pratica':year,'Pratiche vendute':t.practices,'Venduto €':t.venduto/100,'Prodotto €':t.prodotto/100,'Fatturato netto €':t.fatturato/100,'Incassato €':t.incassato/100,'SAL su fatture complete €':t.fullSal/100,'Pratiche SAL fatture complete':t.fullCount,'SAL incassi parziali minimo €':t.pMin/100,'SAL incassi parziali massimo €':t.pMax/100,'Pratiche SAL incassi parziali':t.partialCount}})
- .sort((a,b)=>String(a['Anno creazione pratica']).localeCompare(String(b['Anno creazione pratica'])));
+ return [...by.entries()].map(([year,rows])=>{const t=fx.summary(rows);return {'Anno delibera':year,'Pratiche vendute':t.practices,'Venduto €':t.venduto/100,'Prodotto €':t.prodotto/100,'Fatturato netto €':t.fatturato/100,'Incassato €':t.incassato/100,'SAL su fatture complete €':t.fullSal/100,'Pratiche SAL fatture complete':t.fullCount,'SAL incassi parziali minimo €':t.pMin/100,'SAL incassi parziali massimo €':t.pMax/100,'Pratiche SAL incassi parziali':t.partialCount}})
+ .sort((a,b)=>String(a['Anno delibera']).localeCompare(String(b['Anno delibera'])));
 }
 function csvSafe(value){let s=String(value??'');if(/^[\s]*[=+\-@]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"'}
 function downloadCSV(){
