@@ -152,7 +152,7 @@ function renderAll(){
  $('kPaid').textContent=number(totals.paid);$('kPaidInfo').textContent=number(totals.invoice)+' fatturate integralmente';
  $('kFull').textContent=euroC(totals.fullSal);$('kFullInfo').textContent=number(totals.fullCount)+' pratiche conteggiate'+(totals.excludedFull?' · '+number(totals.excludedFull)+' escluse/acconti':'')+' · netto revisioni';
  $('kPartial').textContent=totals.partialCount?(totals.pMin===totals.pMax?euroC(totals.pMin):euroC(totals.pMin)+' – '+euroC(totals.pMax)):'0,00 €';
- $('kPartialInfo').textContent=number(totals.partialCount)+' pratiche con SAL · '+number(totals.chosenCount)+' regimi scelti · '+number(totals.pendingCount)+' da simulare'+(totals.zeroCount?' · '+number(totals.zeroCount)+' SAL a zero':'')+(totals.excludedPartial?' · '+number(totals.excludedPartial)+' escluse/acconti':'');
+ $('kPartialInfo').textContent=number(totals.partialCount)+' pratiche con SAL · '+number(totals.chosenCount)+(totals.chosenCount===1?' regime scelto':' regimi scelti')+' · '+number(totals.pendingCount)+' da simulare'+(totals.zeroCount?' · '+number(totals.zeroCount)+' SAL a zero':'')+(totals.excludedPartial?' · '+number(totals.excludedPartial)+' escluse/acconti':'');
  let notices=[];
  if(totals.multiRows)notices.push(number(totals.multiRows)+' commesse con più righe economiche: i valori sono aggregati per codice e sede.');
  if(totals.possibleRepeats)notices.push(number(totals.possibleRepeats)+' commesse con righe economiche identiche: verifica l’eventuale duplicazione.');
