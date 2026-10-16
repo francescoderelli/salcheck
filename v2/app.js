@@ -5,7 +5,7 @@ const $=id=>document.getElementById(id), fx=window.SALCore;
 const euroC=v=>new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR'}).format(v/100);
 const number=v=>new Intl.NumberFormat('it-IT').format(v);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let book=null,scope='choose',network='all',selectedSites=new Set(),selectedYear='',siteSearchTerm='',focus='',tab='full-sal',term='',coefficient='',page=0,fileName='',review=new Map(),activeRows=[],currentRows=[],rowLookup=new Map(),detailSort={key:'',dir:'asc'},siteSort={key:'',dir:'asc'};
+let book=null,scope='choose',network='all',selectedSites=new Set(),selectedMacroarea='',selectedYear='',siteSearchTerm='',focus='',tab='full-sal',term='',coefficient='',page=0,fileName='',review=new Map(),activeRows=[],currentRows=[],rowLookup=new Map(),detailSort={key:'',dir:'asc'},siteSort={key:'',dir:'asc'};
 const PAGE=40;
 const REVIEW_STORAGE_KEY='salcheck-v2-practice-review-v1';
 const REVIEW_OPTIONS=['Da verificare','Lavoro eseguito','Acconto','Da escludere'];
@@ -59,8 +59,9 @@ function parse(file){
    try{
     const result=base.finalize(settings());
     if(!result.rows.length)throw Error('Non ho trovato pratiche con venduto positivo nel file.');
-    book={...result,sourceStore:base};rowLookup=new Map(result.rows.map(r=>[r.key,r]));fileName=file.name;restoreReviews(result.rows);network='all';scope='choose';selectedSites.clear();selectedYear='';siteSearchTerm='';focus='';tab='full-sal';term='';coefficient='';page=0;
+    book={...result,sourceStore:base};rowLookup=new Map(result.rows.map(r=>[r.key,r]));fileName=file.name;restoreReviews(result.rows);network='all';scope='choose';selectedSites.clear();selectedMacroarea='';selectedYear='';siteSearchTerm='';focus='';tab='full-sal';term='';coefficient='';page=0;
     $('networkFilter').value='all';$('siteSearchInput').value='';$('search').value='';$('coef').value='';
+    renderMacroareas();
     setPickerOpen(false);
     renderYears();
     renderFileScope();
@@ -82,6 +83,16 @@ function renderFileScope(){
   ?'Perimetro reale del file importato · '+number(stats.allRows)+' righe lette. La presenza di più macroaree non garantisce, da sola, che siano comprese tutte le sedi italiane.'
   :'Questo export non permette di identificare le macroaree: controlla il filtro della dashboard prima di confrontare i totali nazionali.';
 }
+const COMMON_MACROAREAS=['NORD','CENTRO','SUD','N/A','Non indicata'];
+function areaName(v){return String(v??'').trim()||'Non indicata'}
+function renderMacroareas(){
+ const extras=(book.stats.macroareas||[]).map(a=>a.name).filter(x=>!COMMON_MACROAREAS.includes(x)).sort((a,b)=>a.localeCompare(b));
+ const options=[...COMMON_MACROAREAS,...extras];
+ $('macroareaFilter').innerHTML='<option value="">Tutte le macroaree</option>'+
+ options.map(name=>'<option value="'+esc(name)+'">'+esc(name==='NORD'?'Nord':name==='CENTRO'?'Centro':name==='SUD'?'Sud':name)+'</option>').join('');
+ $('macroareaFilter').value=selectedMacroarea;
+}
+function matchesMacroarea(r){return !selectedMacroarea||areaName(r.area)===selectedMacroarea}
 function renderYears(){
  const years=[...new Set(book.rows.map(x=>x.year).filter(Boolean))].sort((a,b)=>b.localeCompare(a));
  $('yearFilter').innerHTML='<option value="">Tutti gli anni</option>'+years.map(y=>'<option value="'+esc(y)+'">'+esc(y)+'</option>').join('');
@@ -91,7 +102,7 @@ function renderYears(){
 function keepSite(s){
  return (scope==='all'||selectedSites.has(s.key))&&(network==='all'||s.network===network);
 }
-function scoped(){const ids=new Set(book.sites.filter(keepSite).map(s=>s.key));return book.rows.filter(x=>ids.has(x.siteKey)&&(!selectedYear||x.year===selectedYear))}
+function scoped(){const ids=new Set(book.sites.filter(keepSite).map(s=>s.key));return book.rows.filter(x=>ids.has(x.siteKey)&&matchesMacroarea(x)&&(!selectedYear||x.year===selectedYear))}
 function renderAll(){
  if(!book)return;
  document.querySelectorAll('[data-scope]').forEach(el=>el.classList.toggle('on',el.dataset.scope===scope));
@@ -100,7 +111,7 @@ function renderAll(){
  $('emptyState').hidden=hasSelection;$('results').hidden=!hasSelection;
  activeRows=scoped();const scopedSites=new Set(activeRows.map(x=>x.siteKey));
  const totals=financialSummary(activeRows);
- $('scopeDescription').textContent=scopedSites.size+' sedi con pratiche vendute · '+(network==='all'?'Dirette + franchising':network)+' · '+(selectedYear?'Anno delibera '+selectedYear:'Tutti gli anni');
+ $('scopeDescription').textContent=scopedSites.size+' sedi con pratiche vendute · '+(network==='all'?'Dirette + franchising':network)+' · '+(selectedMacroarea?'Macroarea '+selectedMacroarea:'Tutte le macroaree')+' · '+(selectedYear?'Anno delibera '+selectedYear:'Tutti gli anni');
  $('kPrat').textContent=number(totals.practices);$('kSold').textContent='Venduto '+euroC(totals.venduto);
  $('kPaid').textContent=number(totals.paid);$('kPaidInfo').textContent=number(totals.invoice)+' fatturate integralmente';
  $('kFull').textContent=euroC(totals.fullSal);$('kFullInfo').textContent=number(totals.fullCount)+' pratiche conteggiate'+(totals.excludedFull?' · '+number(totals.excludedFull)+' escluse/acconti':'')+' · netto revisioni';
@@ -116,7 +127,8 @@ function renderAll(){
 function pickerSiteOptions(){
  if(!book)return;
  const query=siteSearchTerm.trim().toLocaleLowerCase('it');
- const sites=book.sites.filter(s=>s.withSale>0&&(network==='all'||s.network===network))
+ const eligibleSiteKeys=new Set(book.rows.filter(r=>matchesMacroarea(r)).map(r=>r.siteKey));
+ const sites=book.sites.filter(s=>s.withSale>0&&eligibleSiteKeys.has(s.key)&&(network==='all'||s.network===network))
  .filter(s=>!query||s.code.toLocaleLowerCase('it').includes(query)||s.network.toLocaleLowerCase('it').includes(query))
  .sort((a,b)=>a.code.localeCompare(b.code)||a.network.localeCompare(b.network));
  $('siteOptions').innerHTML=sites.map(s=>'<label class="picker-option"><input type="checkbox" data-site="'+encodeURIComponent(s.key)+'" '+(selectedSites.has(s.key)?'checked':'')+
@@ -229,7 +241,7 @@ function recalculating(){
 }
 function showScope(mode){scope=mode;focus='';page=0;renderAll()}
 function exportRows(rows){return rows.map(r=>{
- const data={'Commessa':r.code,'Anno delibera':r.year,'Sede':r.site,'Rete':r.network,'Società':r.company,'Macroarea':r.area,'Stato (informativo)':r.state,'Indirizzo':r.address,
+ const data={'Commessa':r.code,'Anno delibera':r.year,'Sede':r.site,'Rete':r.network,'Società':r.company,'Macroarea':areaName(r.area),'Stato (informativo)':r.state,'Indirizzo':r.address,
  'Venduto €':r.venduto/100,'Prodotto €':r.prodotto/100,'Fatturato netto a pagare €':r.fatturato/100,'Incassato €':r.incassato/100,
  'Regime compatibile':r.coefficient,'SAL venduto meno prodotto €':r.remaining/100,'SAL teorico min €':r.pMin/100,'SAL teorico max €':r.pMax/100,
  'Regimi teorici':r.scenarios.map(x=>x.fx).join(' / '),'Categoria':r.kind,'Righe aggregate':r.lines,'Righe economiche identiche':r.sameFinance?'Sì':'No',
@@ -243,12 +255,12 @@ function exportRows(rows){return rows.map(r=>{
 function summaryTable(){
  const by=new Map();
  for(const r of activeRows){if(!by.has(r.siteKey))by.set(r.siteKey,[]);by.get(r.siteKey).push(r)}
- return [...by.entries()].map(([key,rs])=>{const s=financialSummary(rs),r=rs[0];return {'Sede':r.site,'Rete':r.network,'Filtro anno':selectedYear||'Tutti gli anni','Pratiche vendute':s.practices,'Venduto €':s.venduto/100,'Prodotto €':s.prodotto/100,'Fatturato netto a pagare €':s.fatturato/100,'Incassato €':s.incassato/100,'Pratiche SAL completo':s.fullCount,'SAL fatture complete €':s.fullSal/100,'Pratiche SAL parziale':s.partialCount,'SAL parziale min €':s.pMin/100,'SAL parziale max €':s.pMax/100,'Escluse/acconti SAL completo':s.excludedFull,'Escluse/acconti SAL parziale':s.excludedPartial,'Anomalie codici ripetuti':s.possibleRepeats}}).sort((a,b)=>b['SAL fatture complete €']-a['SAL fatture complete €'])
+ return [...by.entries()].map(([key,rs])=>{const s=financialSummary(rs),r=rs[0];return {'Sede':r.site,'Rete':r.network,'Filtro macroarea':selectedMacroarea||'Tutte le macroaree','Filtro anno':selectedYear||'Tutti gli anni','Pratiche vendute':s.practices,'Venduto €':s.venduto/100,'Prodotto €':s.prodotto/100,'Fatturato netto a pagare €':s.fatturato/100,'Incassato €':s.incassato/100,'Pratiche SAL completo':s.fullCount,'SAL fatture complete €':s.fullSal/100,'Pratiche SAL parziale':s.partialCount,'SAL parziale min €':s.pMin/100,'SAL parziale max €':s.pMax/100,'Escluse/acconti SAL completo':s.excludedFull,'Escluse/acconti SAL parziale':s.excludedPartial,'Anomalie codici ripetuti':s.possibleRepeats}}).sort((a,b)=>b['SAL fatture complete €']-a['SAL fatture complete €'])
 }
 function summaryYears(){
  const by=new Map();
  for(const r of activeRows){const key=r.year||'Anno non disponibile';if(!by.has(key))by.set(key,[]);by.get(key).push(r)}
- return [...by.entries()].map(([year,rows])=>{const t=financialSummary(rows);return {'Anno delibera':year,'Pratiche vendute':t.practices,'Venduto €':t.venduto/100,'Prodotto €':t.prodotto/100,'Fatturato netto a pagare €':t.fatturato/100,'Incassato €':t.incassato/100,'SAL su fatture complete €':t.fullSal/100,'Pratiche SAL fatture complete':t.fullCount,'SAL incassi parziali minimo €':t.pMin/100,'SAL incassi parziali massimo €':t.pMax/100,'Pratiche SAL incassi parziali':t.partialCount,'Escluse/acconti SAL completo':t.excludedFull,'Escluse/acconti SAL parziale':t.excludedPartial}})
+ return [...by.entries()].map(([year,rows])=>{const t=financialSummary(rows);return {'Anno delibera':year,'Filtro macroarea':selectedMacroarea||'Tutte le macroaree','Pratiche vendute':t.practices,'Venduto €':t.venduto/100,'Prodotto €':t.prodotto/100,'Fatturato netto a pagare €':t.fatturato/100,'Incassato €':t.incassato/100,'SAL su fatture complete €':t.fullSal/100,'Pratiche SAL fatture complete':t.fullCount,'SAL incassi parziali minimo €':t.pMin/100,'SAL incassi parziali massimo €':t.pMax/100,'Pratiche SAL incassi parziali':t.partialCount,'Escluse/acconti SAL completo':t.excludedFull,'Escluse/acconti SAL parziale':t.excludedPartial}})
  .sort((a,b)=>String(a['Anno delibera']).localeCompare(String(b['Anno delibera'])));
 }
 function csvSafe(value){let s=String(value??'');if(/^[\s]*[=+\-@]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"'}
@@ -283,6 +295,7 @@ $('drop').ondragleave=()=>{$('drop').classList.remove('dragging')};
 $('drop').ondrop=e=>{$('drop').classList.remove('dragging');parse(e.dataTransfer.files[0])};
 document.querySelectorAll('[data-scope]').forEach(b=>b.onclick=()=>showScope(b.dataset.scope));
 $('networkFilter').onchange=e=>{network=e.target.value;focus='';page=0;renderAll()};
+$('macroareaFilter').onchange=e=>{selectedMacroarea=e.target.value;focus='';page=0;renderAll()};
 $('yearFilter').onchange=e=>{selectedYear=e.target.value;focus='';page=0;renderAll()};
 $('clearSite').onclick=()=>{selectedSites.clear();focus='';page=0;renderAll()};
 $('sitePickerToggle').onclick=()=>setPickerOpen($('sitePickerPanel').hidden);
