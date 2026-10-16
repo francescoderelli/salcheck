@@ -7,6 +7,7 @@ Versione sperimentale sul branch `feature/v2-spa-nazionale`. **La V1 rimane inal
 2. Caricare un CSV Stati pratiche contenente `CountryRete`, `Sede`, `CodiceCommessa`, `Venduto€`, `ProdottoLordo€`, `FatturatoTotale€`, `IncassatoTotale€`.
 3. L'opzione iniziale **Scegli la sede** non preseleziona nulla: il report rimane vuoto finché l'utente seleziona dal menu una sede diretta o franchising. Il menu mostra soltanto le sedi compatibili con il filtro rete.
 4. Passare a **Tutte le sedi** per il consolidato completo. Filtrare per rete e categoria ed esportare Excel riepilogativo oppure CSV filtrato.
+5. Il filtro **Anno creazione pratica** si popola dagli anni effettivamente presenti nel CSV (per l'export campione, 2022–2026). Il filtro usa `DataCreazionePratica` e, solo se mancante, il prefisso anno di `CodiceCommessa`. È l'anno della pratica, non l'anno di produzione o fatturazione. Può essere applicato a una singola sede o all'intera rete e filtra anche gli export. Il file Excel include il foglio `Riepilogo anni`.
 
 ## Calcolo
 - Il **Preventivato** non entra mai nei calcoli.
