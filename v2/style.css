@@ -51,3 +51,9 @@
 
 /* Controllo macroarea — tutte le tipologie, comprese N/A e non classificata */
 @media(min-width:1101px){.config{grid-template-columns:1.45fr 1fr .9fr .9fr 1.3fr}}
+
+/* Selezione per pratica del regime di simulazione SAL */
+.scenario-picker{min-width:196px;max-width:260px;width:100%;border:1px solid #b9d0df;border-radius:8px;padding:9px 7px;background:#fff;color:#345c76;font-size:12px}
+.scenario-picker.has-choice{border-color:#77ac88;background:#f0f9f2;color:#175a35;font-weight:720}
+.scenario-picker:focus-visible{outline:2px solid #2475b1;outline-offset:1px}
+.simulated-amount{color:#17683e!important;white-space:nowrap}
