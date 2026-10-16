@@ -59,11 +59,11 @@ function parse(file){
    try{
     const result=base.finalize(settings());
     if(!result.rows.length)throw Error('Non ho trovato pratiche con venduto positivo nel file.');
-    book={...result,sourceStore:base};rowLookup=new Map(result.rows.map(r=>[r.key,r]));fileName=file.name;restoreReviews(result.rows);network='all';scope='choose';selectedSites.clear();selectedYear='';siteSearchTerm='';focus='';tab='full-sal';siteSearch='';term='';coefficient='';page=0;
+    book={...result,sourceStore:base};rowLookup=new Map(result.rows.map(r=>[r.key,r]));fileName=file.name;restoreReviews(result.rows);network='all';scope='choose';selectedSites.clear();selectedYear='';siteSearchTerm='';focus='';tab='full-sal';term='';coefficient='';page=0;
     $('networkFilter').value='all';$('siteSearchInput').value='';$('search').value='';$('coef').value='';
     setPickerOpen(false);
     renderYears();
-    selectedSite='';renderAll();$('dashboard').hidden=false;
+    renderAll();$('dashboard').hidden=false;
     $('fileLabel').textContent=fileName+' · '+number(result.stats.allRows)+' righe lette · '+number(result.sites.length)+' codici sede';
     $('inputInfo').textContent=number(file.size/1024/1024|0)+' MB · '+number(result.stats.allRows)+' righe · '+number(result.sites.length)+' sedi';
     loading(false);
