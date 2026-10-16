@@ -63,6 +63,7 @@ function parse(file){
     $('networkFilter').value='all';$('siteSearchInput').value='';$('search').value='';$('coef').value='';
     setPickerOpen(false);
     renderYears();
+    renderFileScope();
     renderAll();$('dashboard').hidden=false;
     $('fileLabel').textContent=fileName+' · '+number(result.stats.allRows)+' righe lette · '+number(result.sites.length)+' codici sede';
     $('inputInfo').textContent=number(file.size/1024/1024|0)+' MB · '+number(result.stats.allRows)+' righe · '+number(result.sites.length)+' sedi';
@@ -73,6 +74,14 @@ function parse(file){
  });
 }
 function settings(){return {invoiceTolerance:Number($('tolInvoice').value),cashTolerance:Number($('tolCash').value),minSal:Number($('tolSal').value)}}
+function renderFileScope(){
+ const stats=book.stats,areas=stats.macroareas||[];
+ $('fileMacroareas').textContent=!stats.macroareaColumnPresent?'Campo macroarea non presente':
+  areas.length?areas.map(a=>a.name+' ('+number(a.count)+' righe)').join(' · '):'Nessuna macroarea rilevata';
+ $('fileScopeNote').textContent=stats.macroareaColumnPresent
+  ?'Perimetro reale del file importato · '+number(stats.allRows)+' righe lette. La presenza di più macroaree non garantisce, da sola, che siano comprese tutte le sedi italiane.'
+  :'Questo export non permette di identificare le macroaree: controlla il filtro della dashboard prima di confrontare i totali nazionali.';
+}
 function renderYears(){
  const years=[...new Set(book.rows.map(x=>x.year).filter(Boolean))].sort((a,b)=>b.localeCompare(a));
  $('yearFilter').innerHTML='<option value="">Tutti gli anni</option>'+years.map(y=>'<option value="'+esc(y)+'">'+esc(y)+'</option>').join('');
