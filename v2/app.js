@@ -5,7 +5,7 @@ const $=id=>document.getElementById(id), fx=window.SALCore;
 const euroC=v=>new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR'}).format(v/100);
 const number=v=>new Intl.NumberFormat('it-IT').format(v);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let book=null,scope='choose',network='all',selectedSite='',selectedYear='',siteSearch='',focus='',tab='full-sal',term='',coefficient='',page=0,fileName='',review=new Map(),activeRows=[],currentRows=[],rowLookup=new Map();
+let book=null,scope='choose',network='all',selectedSite='',selectedYear='',siteSearch='',focus='',tab='full-sal',term='',coefficient='',page=0,fileName='',review=new Map(),activeRows=[],currentRows=[],rowLookup=new Map(),detailSort={key:'',dir:'asc'},siteSort={key:'',dir:'asc'};
 const PAGE=40;
 const REVIEW_STORAGE_KEY='salcheck-v2-practice-review-v1';
 const REVIEW_OPTIONS=['Da verificare','Lavoro eseguito','Acconto','Da escludere'];
@@ -113,7 +113,18 @@ function renderSiteSelection(){
 function renderSites(){
  const groups=new Map();
  for(const r of activeRows){if(!groups.has(r.siteKey))groups.set(r.siteKey,[]);groups.get(r.siteKey).push(r)}
- const list=[...groups.entries()].map(([key,rows])=>({key,site:rows[0].site,network:rows[0].network,t:financialSummary(rows)})).sort((a,b)=>b.t.fullSal-a.t.fullSal||b.t.pMax-a.t.pMax);
+ const list=[...groups.entries()].map(([key,rows])=>({key,site:rows[0].site,network:rows[0].network,t:financialSummary(rows)}));
+ const siteValue=(x,key)=>key==='practices'?x.t.practices:key==='fullSal'?x.t.fullSal:key==='partialMax'?x.t.pMax:key==='anomalies'?x.t.unpaid+x.t.unmatched+x.t.possibleRepeats:0;
+ list.sort((a,b)=>siteSort.key
+  ?(siteValue(a,siteSort.key)-siteValue(b,siteSort.key))*(siteSort.dir==='asc'?1:-1)||a.site.localeCompare(b.site)
+  :b.t.fullSal-a.t.fullSal||b.t.pMax-a.t.pMax||a.site.localeCompare(b.site));
+ document.querySelectorAll('[data-site-sort]').forEach(button=>{
+  const selected=button.dataset.siteSort===siteSort.key;
+  const heading=button.closest('th'),icon=button.querySelector('.sort-indicator');
+  if(icon)icon.textContent=selected?(siteSort.dir==='asc'?'↑':'↓'):'↕';
+  button.classList.toggle('is-sorted',selected);
+  if(heading)heading.setAttribute('aria-sort',selected?(siteSort.dir==='asc'?'ascending':'descending'):'none');
+ });
  $('siteTable').innerHTML=list.map(x=>'<tr data-focus="'+esc(x.key)+'" class="'+(focus===x.key?'active':'')+'"><td><span class="site-code">'+esc(x.site)+'</span></td><td><span class="pill '+(x.network==='IT-Franchising'?'fr':'')+'">'+(x.network==='IT-Franchising'?'Franchising':'Diretta')+'</span></td><td class="numeric">'+number(x.t.practices)+'</td><td class="numeric money-strong">'+euroC(x.t.fullSal)+' <span class="soft">('+number(x.t.fullCount)+')</span></td><td class="numeric money-secondary">'+(x.t.partialCount?euroC(x.t.pMin)+' – '+euroC(x.t.pMax):'—')+' <span class="soft">('+number(x.t.partialCount)+')</span></td><td class="numeric">'+number(x.t.unpaid+x.t.unmatched+x.t.possibleRepeats)+'</td></tr>').join('')||'<tr><td colspan="6" class="empty">Nessuna sede da mostrare</td></tr>';
 }
 const TAB_LABELS={
@@ -134,7 +145,13 @@ function currentDetail(){
  return activeRows.filter(r=>(!focus||r.siteKey===focus)&&matchTab(r)
   &&(!coefficient||r.coefficient.split(' + ').includes(coefficient)||tab==='partial-sal'&&r.scenarios.some(x=>x.fx===coefficient))
   &&(!term||[r.code,r.site,r.address,r.state].some(x=>String(x).toLowerCase().includes(term))))
-  .sort((a,b)=>(tab==='partial-sal'?b.pMax-a.pMax:tab==='full-sal'?b.remaining-a.remaining:b.venduto-a.venduto))
+  .sort((a,b)=>{
+   if(detailSort.key){
+    const field=detailSort.key,dir=detailSort.dir==='asc'?1:-1;
+    return ((Number(a[field])||0)-(Number(b[field])||0))*dir||a.code.localeCompare(b.code);
+   }
+   return (tab==='partial-sal'?b.pMax-a.pMax:tab==='full-sal'?b.remaining-a.remaining:b.venduto-a.venduto)||a.code.localeCompare(b.code);
+  })
 }
 function moneyTd(c,strong){return '<td class="numeric '+(strong?'money-strong':'')+'">'+euroC(c)+'</td>'}
 function selectReview(r){
@@ -145,11 +162,24 @@ function renderDetails(){
  $('focusTag').hidden=!focus;$('clearFocus').hidden=!focus;
  $('focusTag').textContent=focus?'Solo '+idToCode(focus):'';
  $('detailDescription').textContent=focus?'Dettaglio della sede '+idToCode(focus)+' · report identico alla V1':'Esamina le commesse della rete e verifica manualmente gli importi.';
+ const validSortKeys=tab==='partial-sal'?['venduto','prodotto','fatturato','incassato','pMin','pMax']:['venduto','prodotto','fatturato','incassato','remaining'];
+ if(detailSort.key&&!validSortKeys.includes(detailSort.key))detailSort={key:'',dir:'asc'};
  currentRows=currentDetail();const pages=Math.max(1,Math.ceil(currentRows.length/PAGE));page=Math.max(0,Math.min(page,pages-1));
  $('detailCount').textContent=number(currentRows.length)+' commesse'+(currentRows.some(isExcluded)?' · '+number(currentRows.filter(isExcluded).length)+' escluse/acconti, ancora visibili':'');$('pageInfo').textContent=(page+1)+' / '+pages;$('prev').disabled=page===0;$('next').disabled=page>=pages-1;
- const c=['Commessa','Anno delibera','Sede','Rete','Stato (info)','Venduto','Prodotto','Fatturato netto','Incassato'];
- const ends=tab==='partial-sal'?['SAL minimo','SAL massimo','Regimi possibili','Verifica']:['Regime','SAL residuo','Righe','Verifica'];
- $('detailHead').innerHTML='<tr>'+[...c,...ends].map((x,i)=>'<th class="'+((i>=5&&i<=8||i===10||tab==='partial-sal'&&i===9)?'numeric':'')+'">'+x+'</th>').join('')+'</tr>';
+ const headers=[
+  {label:'Commessa'},{label:'Anno delibera'},{label:'Sede'},{label:'Rete'},{label:'Stato (info)'},
+  {label:'Venduto',key:'venduto'},{label:'Prodotto',key:'prodotto'},
+  {label:'Fatturato netto a pagare',key:'fatturato'},{label:'Incassato',key:'incassato'},
+  ...(tab==='partial-sal'?[{label:'SAL minimo',key:'pMin'},{label:'SAL massimo',key:'pMax'},{label:'Regimi possibili'}]:
+  [{label:'Regime'},{label:'SAL residuo',key:'remaining'},{label:'Verifica'}])
+ ];
+ if(tab==='partial-sal')headers.push({label:'Verifica'});
+ $('detailHead').innerHTML='<tr>'+headers.map(x=>{
+  if(!x.key)return '<th>'+esc(x.label)+'</th>';
+  const selected=detailSort.key===x.key,arrow=selected?(detailSort.dir==='asc'?'↑':'↓'):'↕';
+  return '<th class="numeric" aria-sort="'+(selected?(detailSort.dir==='asc'?'ascending':'descending'):'none')+
+   '"><button type="button" class="sort-head '+(selected?'is-sorted':'')+'" data-detail-sort="'+esc(x.key)+'" title="Ordina '+esc(x.label)+' per importo">'+esc(x.label)+' <span class="sort-indicator" aria-hidden="true">'+arrow+'</span></button></th>';
+ }).join('')+'</tr>';
  $('detailTable').innerHTML=currentRows.slice(page*PAGE,(page+1)*PAGE).map(r=>{
   let h='<tr class="'+(isExcluded(r)?'review-excluded':'')+'"><td><strong>'+esc(r.code)+'</strong><div class="original">'+esc(r.address).slice(0,70)+'</div></td><td>'+esc(r.year||'—')+'</td><td>'+esc(r.site)+'</td><td>'+esc(r.network==='IT-Franchising'?'Franchising':'Diretta')+'</td><td>'+esc(r.state)+'</td>';
   h+=moneyTd(r.venduto)+moneyTd(r.prodotto)+moneyTd(r.fatturato)+moneyTd(r.incassato);
@@ -158,10 +188,10 @@ function renderDetails(){
     h+=moneyTd(r.pMin)+moneyTd(r.pMax,true)+'<td>'+details+'</td><td>'+selectReview(r)+'</td>';
   }else{
     h+='<td>'+esc(r.coefficient||'—')+'</td>'+moneyTd(r.remaining,r.fullSal)
-    +'<td>'+(r.lines>1?'<span class="duplicate" title="'+(r.sameFinance?'Possibile duplicazione economica':'Righe economiche aggregate')+'">'+number(r.lines)+' righe'+(r.sameFinance?' ⚠':'')+'</span>':'1')+'</td><td>'+selectReview(r)+'</td>';
+    +'<td>'+selectReview(r)+'</td>';
   }
   return h+'</tr>'
- }).join('')||'<tr><td colspan="13" class="empty">Nessuna pratica nei filtri selezionati.</td></tr>';
+ }).join('')||'<tr><td colspan="'+(tab==='partial-sal'?13:12)+'" class="empty">Nessuna pratica nei filtri selezionati.</td></tr>';
 }
 function recalculating(){
  if(!book)return;const data=settings();if(Object.values(data).some(x=>!Number.isFinite(x)||x<0)){err('Le tolleranze devono essere numeri non negativi.');return}
@@ -170,7 +200,7 @@ function recalculating(){
 function showScope(mode){scope=mode;focus='';page=0;renderAll()}
 function exportRows(rows){return rows.map(r=>{
  const data={'Commessa':r.code,'Anno delibera':r.year,'Sede':r.site,'Rete':r.network,'Società':r.company,'Macroarea':r.area,'Stato (informativo)':r.state,'Indirizzo':r.address,
- 'Venduto €':r.venduto/100,'Prodotto €':r.prodotto/100,'Fatturato netto €':r.fatturato/100,'Incassato €':r.incassato/100,
+ 'Venduto €':r.venduto/100,'Prodotto €':r.prodotto/100,'Fatturato netto a pagare €':r.fatturato/100,'Incassato €':r.incassato/100,
  'Regime compatibile':r.coefficient,'SAL venduto meno prodotto €':r.remaining/100,'SAL teorico min €':r.pMin/100,'SAL teorico max €':r.pMax/100,
  'Regimi teorici':r.scenarios.map(x=>x.fx).join(' / '),'Categoria':r.kind,'Righe aggregate':r.lines,'Righe economiche identiche':r.sameFinance?'Sì':'No',
  'Revisione':review.get(r.key)||'Da verificare','Escluso dal SAL potenziale':isExcluded(r)?'Sì':'No',
@@ -183,12 +213,12 @@ function exportRows(rows){return rows.map(r=>{
 function summaryTable(){
  const by=new Map();
  for(const r of activeRows){if(!by.has(r.siteKey))by.set(r.siteKey,[]);by.get(r.siteKey).push(r)}
- return [...by.entries()].map(([key,rs])=>{const s=financialSummary(rs),r=rs[0];return {'Sede':r.site,'Rete':r.network,'Filtro anno':selectedYear||'Tutti gli anni','Pratiche vendute':s.practices,'Venduto €':s.venduto/100,'Prodotto €':s.prodotto/100,'Fatturato netto €':s.fatturato/100,'Incassato €':s.incassato/100,'Pratiche SAL completo':s.fullCount,'SAL fatture complete €':s.fullSal/100,'Pratiche SAL parziale':s.partialCount,'SAL parziale min €':s.pMin/100,'SAL parziale max €':s.pMax/100,'Escluse/acconti SAL completo':s.excludedFull,'Escluse/acconti SAL parziale':s.excludedPartial,'Anomalie codici ripetuti':s.possibleRepeats}}).sort((a,b)=>b['SAL fatture complete €']-a['SAL fatture complete €'])
+ return [...by.entries()].map(([key,rs])=>{const s=financialSummary(rs),r=rs[0];return {'Sede':r.site,'Rete':r.network,'Filtro anno':selectedYear||'Tutti gli anni','Pratiche vendute':s.practices,'Venduto €':s.venduto/100,'Prodotto €':s.prodotto/100,'Fatturato netto a pagare €':s.fatturato/100,'Incassato €':s.incassato/100,'Pratiche SAL completo':s.fullCount,'SAL fatture complete €':s.fullSal/100,'Pratiche SAL parziale':s.partialCount,'SAL parziale min €':s.pMin/100,'SAL parziale max €':s.pMax/100,'Escluse/acconti SAL completo':s.excludedFull,'Escluse/acconti SAL parziale':s.excludedPartial,'Anomalie codici ripetuti':s.possibleRepeats}}).sort((a,b)=>b['SAL fatture complete €']-a['SAL fatture complete €'])
 }
 function summaryYears(){
  const by=new Map();
  for(const r of activeRows){const key=r.year||'Anno non disponibile';if(!by.has(key))by.set(key,[]);by.get(key).push(r)}
- return [...by.entries()].map(([year,rows])=>{const t=financialSummary(rows);return {'Anno delibera':year,'Pratiche vendute':t.practices,'Venduto €':t.venduto/100,'Prodotto €':t.prodotto/100,'Fatturato netto €':t.fatturato/100,'Incassato €':t.incassato/100,'SAL su fatture complete €':t.fullSal/100,'Pratiche SAL fatture complete':t.fullCount,'SAL incassi parziali minimo €':t.pMin/100,'SAL incassi parziali massimo €':t.pMax/100,'Pratiche SAL incassi parziali':t.partialCount,'Escluse/acconti SAL completo':t.excludedFull,'Escluse/acconti SAL parziale':t.excludedPartial}})
+ return [...by.entries()].map(([year,rows])=>{const t=financialSummary(rows);return {'Anno delibera':year,'Pratiche vendute':t.practices,'Venduto €':t.venduto/100,'Prodotto €':t.prodotto/100,'Fatturato netto a pagare €':t.fatturato/100,'Incassato €':t.incassato/100,'SAL su fatture complete €':t.fullSal/100,'Pratiche SAL fatture complete':t.fullCount,'SAL incassi parziali minimo €':t.pMin/100,'SAL incassi parziali massimo €':t.pMax/100,'Pratiche SAL incassi parziali':t.partialCount,'Escluse/acconti SAL completo':t.excludedFull,'Escluse/acconti SAL parziale':t.excludedPartial}})
  .sort((a,b)=>String(a['Anno delibera']).localeCompare(String(b['Anno delibera'])));
 }
 function csvSafe(value){let s=String(value??'');if(/^[\s]*[=+\-@]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"'}
@@ -229,6 +259,18 @@ $('clearSite').onclick=()=>{selectedSite='';focus='';page=0;renderAll()};
 $('chosenSite').onchange=e=>{selectedSite=e.target.value?decodeURIComponent(e.target.value):'';focus='';page=0;renderAll()};
 $('recalculate').onclick=recalculating;
 $('siteTable').onclick=e=>{const tr=e.target.closest('tr[data-focus]');if(!tr)return;focus=tr.dataset.focus;tab='full-sal';page=0;term='';coefficient='';$('search').value='';$('coef').value='';renderSites();renderTabs();renderDetails();$('tabs').scrollIntoView({behavior:'smooth',block:'start'})};
+$('siteHead').onclick=e=>{
+ const b=e.target.closest('button[data-site-sort]');if(!b)return;
+ const key=b.dataset.siteSort;
+ siteSort=siteSort.key===key?{key,dir:siteSort.dir==='asc'?'desc':'asc'}:{key,dir:'asc'};
+ renderSites();
+};
+$('detailHead').onclick=e=>{
+ const b=e.target.closest('button[data-detail-sort]');if(!b)return;
+ const key=b.dataset.detailSort;
+ detailSort=detailSort.key===key?{key,dir:detailSort.dir==='asc'?'desc':'asc'}:{key,dir:'asc'};
+ page=0;renderDetails();
+};
 $('clearFocus').onclick=()=>{focus='';renderSites();renderDetails()};
 $('tabs').onclick=e=>{const b=e.target.closest('button[data-tab]');if(!b)return;tab=b.dataset.tab;page=0;renderTabs();renderDetails()};
 $('search').oninput=e=>{term=e.target.value.toLowerCase();page=0;renderDetails()};
