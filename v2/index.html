@@ -12,6 +12,10 @@
 <div id="error" class="alert danger" hidden></div>
 <section id="dashboard" hidden>
 <div class="section-head"><div><p class="eyebrow">CONFIGURA LA VISTA</p><h2>Perimetro dell'analisi</h2></div><span class="hint" id="inputInfo"></span></div>
+<div class="file-scope" id="fileScope" role="status" aria-live="polite">
+ <div><strong>Macroaree presenti nel CSV:</strong> <span id="fileMacroareas">—</span></div>
+ <p id="fileScopeNote">Il perimetro si riferisce alle righe effettivamente esportate, non necessariamente all’intera rete nazionale.</p>
+</div>
 <div class="config">
 <div class="config-cell"><label>Modalità</label><div class="toggle"><button type="button" class="on" data-scope="choose">Scegli le sedi</button><button type="button" data-scope="all">Tutte le sedi</button></div><span class="hint">Seleziona una o più sedi e confrontale insieme, oppure visualizza tutta la rete.</span></div>
 <div class="config-cell"><label>Tipologia rete</label><select id="networkFilter"><option value="all">Dirette + franchising</option><option value="IT-Dirette">Solo dirette</option><option value="IT-Franchising">Solo franchising</option></select></div>
