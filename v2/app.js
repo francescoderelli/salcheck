@@ -5,7 +5,7 @@ const $=id=>document.getElementById(id), fx=window.SALCore;
 const euroC=v=>new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR'}).format(v/100);
 const number=v=>new Intl.NumberFormat('it-IT').format(v);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let book=null,scope='choose',network='all',selectedSite='',selectedYear='',siteSearch='',focus='',tab='full-sal',term='',coefficient='',page=0,fileName='',review=new Map(),activeRows=[],currentRows=[];
+let book=null,scope='choose',network='all',selectedSite='',selectedYear='',siteSearch='',focus='',tab='full-sal',term='',coefficient='',page=0,fileName='',review=new Map(),activeRows=[],currentRows=[],rowLookup=new Map();
 const PAGE=40;
 const REVIEW_STORAGE_KEY='salcheck-v2-practice-review-v1';
 const REVIEW_OPTIONS=['Da verificare','Lavoro eseguito','Acconto','Da escludere'];
@@ -59,7 +59,7 @@ function parse(file){
    try{
     const result=base.finalize(settings());
     if(!result.rows.length)throw Error('Non ho trovato pratiche con venduto positivo nel file.');
-    book={...result,sourceStore:base};fileName=file.name;restoreReviews(result.rows);network='all';scope='choose';selectedYear='';focus='';tab='full-sal';siteSearch='';term='';coefficient='';page=0;
+    book={...result,sourceStore:base};rowLookup=new Map(result.rows.map(r=>[r.key,r]));fileName=file.name;restoreReviews(result.rows);network='all';scope='choose';selectedYear='';focus='';tab='full-sal';siteSearch='';term='';coefficient='';page=0;
     $('networkFilter').value='all';$('siteFilter').value='';$('search').value='';$('coef').value='';
     renderYears();
     selectedSite='';renderAll();$('dashboard').hidden=false;
@@ -123,7 +123,12 @@ const TAB_LABELS={
 function matchTab(r){if(tab==='all')return true;if(tab==='fully-paid')return r.paid;return r.kind===tab}
 function renderTabs(){
  const stats={};stats['full-sal']=activeRows.filter(x=>x.fullSal).length;stats['partial-sal']=activeRows.filter(x=>x.partial).length;stats['fully-paid']=activeRows.filter(x=>x.paid).length;stats['invoiced-unpaid']=activeRows.filter(x=>x.kind==='invoiced-unpaid').length;stats.other=activeRows.filter(x=>x.kind==='other').length;stats.all=activeRows.length;
- document.querySelectorAll('#tabs button').forEach(el=>{el.classList.toggle('active',el.dataset.tab===tab);el.innerHTML=esc(TAB_LABELS[el.dataset.tab])+'<span class="tabcount">'+number(stats[el.dataset.tab])+'</span>'});
+ document.querySelectorAll('#tabs button').forEach(el=>{
+  el.classList.toggle('active',el.dataset.tab===tab);
+  const category=el.dataset.tab;
+  const removed=(category==='full-sal'?activeRows.filter(r=>r.fullSal&&isExcluded(r)).length:category==='partial-sal'?activeRows.filter(r=>r.partial&&isExcluded(r)).length:0);
+  el.innerHTML=esc(TAB_LABELS[category])+'<span class="tabcount">'+number(stats[category])+(removed?' · '+number(removed)+' escluse/acconti':'')+'</span>';
+ });
 }
 function currentDetail(){
  return activeRows.filter(r=>(!focus||r.siteKey===focus)&&matchTab(r)
@@ -134,14 +139,14 @@ function currentDetail(){
 function moneyTd(c,strong){return '<td class="numeric '+(strong?'money-strong':'')+'">'+euroC(c)+'</td>'}
 function selectReview(r){
  let cur=review.get(r.key)||'Da verificare';
- return '<select class="review" data-review="'+esc(r.key)+'" title="Acconto e Da escludere azzerano il contributo al SAL potenziale">'+REVIEW_OPTIONS.map(x=>'<option '+(cur===x?'selected':'')+'>'+esc(x)+'</option>').join('')+'</select>'
+ return '<select class="review" data-review="'+encodeURIComponent(r.key)+'" title="Acconto e Da escludere azzerano il contributo al SAL potenziale">'+REVIEW_OPTIONS.map(x=>'<option '+(cur===x?'selected':'')+'>'+esc(x)+'</option>').join('')+'</select>'
 }
 function renderDetails(){
  $('focusTag').hidden=!focus;$('clearFocus').hidden=!focus;
  $('focusTag').textContent=focus?'Solo '+idToCode(focus):'';
  $('detailDescription').textContent=focus?'Dettaglio della sede '+idToCode(focus)+' · report identico alla V1':'Esamina le commesse della rete e verifica manualmente gli importi.';
  currentRows=currentDetail();const pages=Math.max(1,Math.ceil(currentRows.length/PAGE));page=Math.max(0,Math.min(page,pages-1));
- $('detailCount').textContent=number(currentRows.length)+' commesse';$('pageInfo').textContent=(page+1)+' / '+pages;$('prev').disabled=page===0;$('next').disabled=page>=pages-1;
+ $('detailCount').textContent=number(currentRows.length)+' commesse'+(currentRows.some(isExcluded)?' · '+number(currentRows.filter(isExcluded).length)+' escluse/acconti, ancora visibili':'');$('pageInfo').textContent=(page+1)+' / '+pages;$('prev').disabled=page===0;$('next').disabled=page>=pages-1;
  const c=['Commessa','Anno delibera','Sede','Rete','Stato (info)','Venduto','Prodotto','Fatturato netto','Incassato'];
  const ends=tab==='partial-sal'?['SAL minimo','SAL massimo','Regimi possibili','Verifica']:['Regime','SAL residuo','Righe','Verifica'];
  $('detailHead').innerHTML='<tr>'+[...c,...ends].map((x,i)=>'<th class="'+((i>=5&&i<=8||i===10||tab==='partial-sal'&&i===9)?'numeric':'')+'">'+x+'</th>').join('')+'</tr>';
@@ -160,7 +165,7 @@ function renderDetails(){
 }
 function recalculating(){
  if(!book)return;const data=settings();if(Object.values(data).some(x=>!Number.isFinite(x)||x<0)){err('Le tolleranze devono essere numeri non negativi.');return}
- const raw=book.sourceStore;book={...raw.finalize(data),sourceStore:raw};err('');page=0;renderAll();
+ const raw=book.sourceStore;book={...raw.finalize(data),sourceStore:raw};rowLookup=new Map(book.rows.map(r=>[r.key,r]));err('');page=0;renderAll();
 }
 function showScope(mode){scope=mode;focus='';page=0;renderAll()}
 function exportRows(rows){return rows.map(r=>{
@@ -232,7 +237,7 @@ $('prev').onclick=()=>{page=Math.max(0,page-1);renderDetails()};
 $('next').onclick=()=>{page++;renderDetails()};
 $('detailTable').onchange=e=>{
  const t=e.target.closest('select[data-review]');if(!t)return;
- const r=book?.rows.find(row=>row.key===t.dataset.review);
+ const r=rowLookup.get(decodeURIComponent(t.dataset.review));
  if(!r)return;
  saveReview(r,t.value);
  renderAll();
