@@ -113,7 +113,7 @@ function pickerSiteOptions(){
  $('siteOptions').innerHTML=sites.map(s=>'<label class="picker-option"><input type="checkbox" data-site="'+encodeURIComponent(s.key)+'" '+(selectedSites.has(s.key)?'checked':'')+
  '><span class="picker-code">'+esc(s.code)+'</span><span class="picker-network">'+esc(s.network==='IT-Franchising'?'Franchising':'Diretta')+'</span></label>').join('')
  ||'<p class="picker-no-results">Nessuna sede trovata. Prova un altro codice.</p>';
- $('siteMatchCount').textContent=number(sites.length)+' sedi trovate';
+ $('siteMatchCount').textContent=number(sites.length)+(sites.length===1?' sede trovata':' sedi trovate');
 }
 function setPickerOpen(open){
  $('sitePickerPanel').hidden=!open;
@@ -123,8 +123,8 @@ function setPickerOpen(open){
 function renderSiteSelection(){
  const chosen=[...selectedSites].map(key=>book.sites.find(s=>s.key===key)).filter(Boolean)
  .sort((a,b)=>a.code.localeCompare(b.code)||a.network.localeCompare(b.network));
- $('selectedCount').textContent='('+number(chosen.length)+' selezionate)';
- $('sitePickerLabel').textContent=chosen.length?number(chosen.length)+' sedi selezionate · cerca per aggiungerne altre':'Cerca e seleziona le sedi…';
+ $('selectedCount').textContent='('+number(chosen.length)+(chosen.length===1?' selezionata)':' selezionate)');
+ $('sitePickerLabel').textContent=chosen.length?number(chosen.length)+(chosen.length===1?' sede selezionata · cerca per aggiungerne altre':' sedi selezionate · cerca per aggiungerne altre'):'Cerca e seleziona le sedi…';
  $('selectedChips').innerHTML=chosen.map(s=>'<button class="selected-chip" type="button" data-remove-site="'+encodeURIComponent(s.key)+'" title="Rimuovi '+esc(s.code)+'" aria-label="Rimuovi '+esc(s.code)+'">'+esc(s.code)+' <span aria-hidden="true">×</span></button>').join('');
  $('chosenHint').textContent=chosen.length?'Il report somma solo le sedi selezionate'+(network!=='all'?' appartenenti alla rete filtrata':'')+'. Puoi aggiungerne o rimuoverne altre.':'Apri il menu, cerca e spunta le sedi da analizzare insieme.';
  pickerSiteOptions();
@@ -180,6 +180,7 @@ function selectReview(r){
 }
 function renderDetails(){
  $('focusTag').hidden=!focus;$('clearFocus').hidden=!focus;
+ $('clearFocus').textContent=scope==='all'?'← Torna a tutte le sedi':'← Torna alle sedi selezionate';
  $('focusTag').textContent=focus?'Solo '+idToCode(focus):'';
  $('detailDescription').textContent=focus?'Dettaglio della sede '+idToCode(focus)+' · report identico alla V1':'Esamina le commesse della rete e verifica manualmente gli importi.';
  const validSortKeys=tab==='partial-sal'?['venduto','prodotto','fatturato','incassato','pMin','pMax']:['venduto','prodotto','fatturato','incassato','remaining'];
