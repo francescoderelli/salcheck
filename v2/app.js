@@ -7,6 +7,16 @@ const number=v=>new Intl.NumberFormat('it-IT').format(v);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let book=null,scope='choose',network='all',selectedSites=new Set(),selectedMacroarea='',selectedYear='',siteSearchTerm='',focus='',tab='full-sal',term='',coefficient='',page=0,fileName='',review=new Map(),scenarioChoices=new Map(),activeRows=[],currentRows=[],rowLookup=new Map(),detailSort={key:'',dir:'asc'},siteSort={key:'',dir:'asc'};
 const PAGE=40;
+const IVA_LABELS={
+  '100%':'Reverse charge / split payment',
+  '106%':'IVA 10% e ritenuta 4%',
+  '110%':'IVA 10%',
+  '118%':'IVA 22% e ritenuta 4%',
+  '122%':'IVA 22%'
+};
+// Internal multiplier keys and saved choices remain unchanged.
+function ivaLabel(code){return String(code||'').split(' + ').map(x=>IVA_LABELS[x]||x).join(' + ')}
+
 const REVIEW_STORAGE_KEY='salcheck-v2-practice-review-v1';
 const SCENARIO_STORAGE_KEY='salcheck-v2-partial-regime-v1';
 const REVIEW_OPTIONS=['Da verificare','Lavoro eseguito','Acconto','Da escludere'];
@@ -152,7 +162,7 @@ function renderAll(){
  $('kPaid').textContent=number(totals.paid);$('kPaidInfo').textContent=number(totals.invoice)+' fatturate integralmente';
  $('kFull').textContent=euroC(totals.fullSal);$('kFullInfo').textContent=number(totals.fullCount)+' pratiche conteggiate'+(totals.excludedFull?' · '+number(totals.excludedFull)+' escluse/acconti':'')+' · netto revisioni';
  $('kPartial').textContent=totals.partialCount?(totals.pMin===totals.pMax?euroC(totals.pMin):euroC(totals.pMin)+' – '+euroC(totals.pMax)):'0,00 €';
- $('kPartialInfo').textContent=number(totals.partialCount)+' pratiche con SAL · '+number(totals.chosenCount)+(totals.chosenCount===1?' regime scelto':' regimi scelti')+' · '+number(totals.pendingCount)+' da simulare'+(totals.zeroCount?' · '+number(totals.zeroCount)+' SAL a zero':'')+(totals.excludedPartial?' · '+number(totals.excludedPartial)+' escluse/acconti':'');
+ $('kPartialInfo').textContent=number(totals.partialCount)+' pratiche con SAL · '+number(totals.chosenCount)+(totals.chosenCount===1?' simulazione IVA impostata':' simulazioni IVA impostate')+' · '+number(totals.pendingCount)+' da simulare'+(totals.zeroCount?' · '+number(totals.zeroCount)+' SAL a zero':'')+(totals.excludedPartial?' · '+number(totals.excludedPartial)+' escluse/acconti':'');
  let notices=[];
  if(totals.multiRows)notices.push(number(totals.multiRows)+' commesse con più righe economiche: i valori sono aggregati per codice e sede.');
  if(totals.possibleRepeats)notices.push(number(totals.possibleRepeats)+' commesse con righe economiche identiche: verifica l’eventuale duplicazione.');
@@ -235,9 +245,9 @@ function currentDetail(){
 function moneyTd(c,strong){return '<td class="numeric '+(strong?'money-strong':'')+'">'+euroC(c)+'</td>'}
 function selectScenario(r){
  const chosen=selectedScenario(r);
- return '<select class="scenario-picker '+(chosen?'has-choice':'')+'" data-scenario="'+encodeURIComponent(r.key)+'" title="Seleziona il regime fiscale ipotizzato per questa pratica">'+
- '<option value="">— Da simulare (intervallo) —</option>'+
- r.scenarios.map(s=>'<option value="'+esc(s.fx)+'" '+(chosen?.fx===s.fx?'selected':'')+'>'+esc(s.fx)+' · SAL '+euroC(s.gap)+'</option>').join('')+'</select>';
+ return '<select class="scenario-picker '+(chosen?'has-choice':'')+'" data-scenario="'+encodeURIComponent(r.key)+'" title="Scegli l’IVA fattura da simulare per la pratica">'+
+ '<option value="">— IVA da verificare (intervallo) —</option>'+
+ r.scenarios.map(s=>'<option value="'+esc(s.fx)+'" '+(chosen?.fx===s.fx?'selected':'')+'>'+esc(ivaLabel(s.fx))+' · SAL '+euroC(s.gap)+'</option>').join('')+'</select>';
 }
 function selectReview(r){
  let cur=review.get(r.key)||'Da verificare';
@@ -248,7 +258,7 @@ function renderDetails(){
  $('clearFocus').textContent=scope==='all'?'← Torna a tutte le sedi':'← Torna alle sedi selezionate';
  $('focusTag').textContent=focus?'Solo '+idToCode(focus):'';
  $('detailDescription').textContent=tab==='partial-sal'
-  ?'Seleziona un regime per ogni pratica: viene mostrato solo il relativo SAL. Senza scelta resta l’intervallo teorico. Il riepilogo si aggiorna subito.'
+  ?'Seleziona l’IVA fattura per ogni pratica: viene mostrato solo il relativo SAL. Senza scelta resta l’intervallo teorico. Il riepilogo si aggiorna subito.'
   :(focus?'Dettaglio della sede '+idToCode(focus)+' · report identico alla V1':'Esamina le commesse della rete e verifica manualmente gli importi.');
  const validSortKeys=tab==='partial-sal'?['venduto','prodotto','fatturato','incassato','simSal']:['venduto','prodotto','fatturato','incassato','remaining'];
  if(detailSort.key&&!validSortKeys.includes(detailSort.key))detailSort={key:'',dir:'asc'};
@@ -258,8 +268,8 @@ function renderDetails(){
   {label:'Commessa'},{label:'Anno delibera'},{label:'Sede'},{label:'Rete'},{label:'Stato (info)'},
   {label:'Venduto',key:'venduto'},{label:'Prodotto',key:'prodotto'},
   {label:'Fatturato netto a pagare',key:'fatturato'},{label:'Incassato',key:'incassato'},
-  ...(tab==='partial-sal'?[{label:'Regime da simulare'},{label:'SAL simulato / intervallo',key:'simSal'}]:
-  [{label:'Regime'},{label:'SAL residuo',key:'remaining'},{label:'Verifica'}])
+  ...(tab==='partial-sal'?[{label:'IVA fattura'},{label:'SAL simulato / intervallo',key:'simSal'}]:
+  [{label:'IVA fattura'},{label:'SAL residuo',key:'remaining'},{label:'Verifica'}])
  ];
  if(tab==='partial-sal')headers.push({label:'Verifica'});
  $('detailHead').innerHTML='<tr>'+headers.map(x=>{
@@ -276,7 +286,7 @@ function renderDetails(){
     const amount=result.scenario?euroC(result.max):euroC(result.min)+' – '+euroC(result.max);
     h+='<td>'+selectScenario(r)+'</td><td class="numeric money-strong '+(result.scenario?'simulated-amount':'')+'">'+amount+'</td><td>'+selectReview(r)+'</td>';
   }else{
-    h+='<td>'+esc(r.coefficient||'—')+'</td>'+moneyTd(r.remaining,r.fullSal)
+    h+='<td>'+esc(r.coefficient?ivaLabel(r.coefficient):'—')+'</td>'+moneyTd(r.remaining,r.fullSal)
     +'<td>'+selectReview(r)+'</td>';
   }
   return h+'</tr>'
@@ -290,8 +300,8 @@ function showScope(mode){scope=mode;focus='';page=0;renderAll()}
 function exportRows(rows){return rows.map(r=>{
  const data={'Commessa':r.code,'Anno delibera':r.year,'Sede':r.site,'Rete':r.network,'Società':r.company,'Macroarea':areaName(r.area),'Stato (informativo)':r.state,'Indirizzo':r.address,
  'Venduto €':r.venduto/100,'Prodotto €':r.prodotto/100,'Fatturato netto a pagare €':r.fatturato/100,'Incassato €':r.incassato/100,
- 'Regime compatibile':r.coefficient,'SAL venduto meno prodotto €':r.remaining/100,'SAL teorico min €':r.pMin/100,'SAL teorico max €':r.pMax/100,
- 'Regimi teorici':r.scenarios.map(x=>x.fx).join(' / '),'Regime simulato':selectedScenario(r)?.fx||'Da simulare',
+ 'IVA fattura compatibile':ivaLabel(r.coefficient),'SAL venduto meno prodotto €':r.remaining/100,'SAL teorico min €':r.pMin/100,'SAL teorico max €':r.pMax/100,
+ 'Ipotesi IVA fattura':r.scenarios.map(x=>ivaLabel(x.fx)).join(' / '),'IVA fattura simulata':selectedScenario(r)?ivaLabel(selectedScenario(r).fx):'Da simulare',
  'SAL simulato €':selectedScenario(r)?selectedScenario(r).gap/100:'',
  'SAL conteggiato dopo simulazioni min €':r.partial&&!isExcluded(r)?simulatedRange(r).min/100:0,
  'SAL conteggiato dopo simulazioni max €':r.partial&&!isExcluded(r)?simulatedRange(r).max/100:0,
@@ -300,7 +310,7 @@ function exportRows(rows){return rows.map(r=>{
  'SAL conteggiato fatture complete €':r.fullSal&&!isExcluded(r)?r.remaining/100:0,
  'SAL conteggiato incassi parziali minimo €':r.partial&&!isExcluded(r)?simulatedRange(r).min/100:0,
  'SAL conteggiato incassi parziali massimo €':r.partial&&!isExcluded(r)?simulatedRange(r).max/100:0};
- for(const c of fx.FX){const x=r.scenarios.find(x=>x.fx===c.label);data['Base '+c.label+' €']=x?x.base/100:'';data['SAL '+c.label+' €']=x?x.gap/100:''}
+ for(const c of fx.FX){const x=r.scenarios.find(x=>x.fx===c.label);data['Base '+ivaLabel(c.label)+' €']=x?x.base/100:'';data['SAL '+ivaLabel(c.label)+' €']=x?x.gap/100:''}
  return data
 })}
 function summaryTable(){
