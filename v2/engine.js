@@ -5,14 +5,14 @@ const FX=[{v:1,label:"100%"},{v:1.06,label:"106%"},{v:1.10,label:"110%"},{v:1.18
 const n=x=>{if(typeof x==="number")return x;let s=String(x??"").trim().replace(/[€\s]/g,"");if(!s)return 0;if(s.includes(",")&&s.includes("."))s=s.lastIndexOf(",")>s.lastIndexOf(".")?s.replace(/\./g,"").replace(",","."):s.replace(/,/g,"");else if(s.includes(","))s=s.replace(/\./g,"").replace(",",".");return Number(s)};
 const cent=x=>Math.round((Number(x)+Number.EPSILON)*100);
 const close=(a,b,t)=>Math.abs(a-b)<=t;
-function yearFromDate(date,code){
+function yearFromDate(date){
  const d=String(date??"").trim();
  let m=/^(20\d{2})[-/]/.exec(d);if(m)return m[1];
  m=/^\d{1,2}[-/]\d{1,2}[-/](20\d{2})/.exec(d);if(m)return m[1];
- m=/^(\d{2})IT/.exec(String(code||""));return m?"20"+m[1]:"";
+ return "";
 }
 function rowFromRaw(x){const value=k=>n(x[k]);return {
-  code:String(x.CodiceCommessa||"").trim(),year:yearFromDate(x.DataCreazionePratica,x.CodiceCommessa),site:String(x.Sede||"").trim(),network:String(x.CountryRete||"Non indicata").trim(),
+  code:String(x.CodiceCommessa||"").trim(),year:yearFromDate(x.DataDelibera),site:String(x.Sede||"").trim(),network:String(x.CountryRete||"Non indicata").trim(),
   company:String(x.CodiceSocieta||"").trim(),area:String(x.macroarea||"").trim(),
   state:String(x.StatoPratica||"").trim(),address:String(x.Indirizzo||"").trim(),
   venduto:cent(value("Venduto€")),prodotto:cent(value("ProdottoLordo€")),
