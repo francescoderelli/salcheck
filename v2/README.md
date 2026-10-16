@@ -46,3 +46,9 @@ Le decisioni sono persistite esclusivamente nel `localStorage` del browser per c
 Le colonne monetarie del **Dettaglio pratiche** (Venduto, Prodotto, Fatturato netto a pagare, Incassato e SAL residuo; nei casi parziali SAL minimo e SAL massimo) sono ordinate facendo clic sull'intestazione: primo clic crescente, secondo decrescente. Sono ordinate tramite il valore numerico, non la stringa formattata. La **Classifica sedi** supporta lo stesso comportamento su pratiche vendute, SAL fatture complete, SAL teorico massimo delle fatturazioni parziali e anomalie. L'ordinamento vale per tutte le pratiche filtrate, non soltanto per la pagina mostrata.
 
 La colonna visuale **Righe** è stata rimossa dal dettaglio pratiche per lasciare spazio ai valori economici. Le verifiche sulle righe duplicate restano operative nel motore e l'export audit continua a riportarne il numero. L'intestazione economica è ora **Fatturato netto a pagare**, coerentemente con il significato del dato esportato da Albert.
+
+## Ricerca e selezione multipla delle sedi
+
+La modalità **Scegli le sedi** apre un selettore con campo di ricerca per codice sede e caselle di spunta. L'utente può cercare una sede, selezionarla, continuare a cercarne altre e rimuovere singole sedi tramite le etichette mostrate sotto il campo. Le selezioni possono comprendere **dirette e franchising** contemporaneamente. Il riepilogo, il dettaglio delle commesse, i totali SAL revisionati e tutti i fogli dell'Excel includono soltanto le sedi selezionate (e gli eventuali filtri rete/anno).
+
+La modalità **Tutte le sedi** continua a mostrare tutto l'archivio filtrato per tipologia rete e anno. Passando da una modalità all'altra, le sedi scelte rimangono selezionate fino al nuovo caricamento del CSV o alla pressione di **Azzera selezione**. Le impostazioni delle sedi scelte non sono condivise fra utenti.
