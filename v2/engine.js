@@ -19,9 +19,12 @@ function rowFromRaw(x){const value=k=>n(x[k]);return {
   fatturato:cent(value("FatturatoTotale€")),incassato:cent(value("IncassatoTotale€"))
 }}
 function store(){
- const map=new Map(),siteList=new Map();let allRows=0,invalid=0,rowsWithSale=0;
+ const map=new Map(),siteList=new Map(),macroareaCounts=new Map();let allRows=0,invalid=0,rowsWithSale=0,hasMacroareaColumn=false;
  function add(raw){
   allRows++;
+  if(Object.prototype.hasOwnProperty.call(raw,'macroarea'))hasMacroareaColumn=true;
+  const macroarea=String(raw.macroarea??'').trim()||'Non indicata';
+  macroareaCounts.set(macroarea,(macroareaCounts.get(macroarea)||0)+1);
   const r=rowFromRaw(raw);
   if(!r.code||!r.site||![r.venduto,r.prodotto,r.fatturato,r.incassato].every(Number.isFinite)){invalid++;return}
   const sk=r.network+"\u001f"+r.site,site=siteList.get(sk)||{key:sk,code:r.site,network:r.network,area:new Set(),company:new Set(),raw:0,withSale:0};
@@ -67,7 +70,7 @@ function store(){
     kind
    })
   }
-  return {rows,sites:[...siteList.values()].map(x=>({...x,area:[...x.area],company:[...x.company]})),stats:{allRows,invalid,rowsWithSale,groups:rows.length},settings:{invoiceTolerance,cashTolerance,minSal}}
+  return {rows,sites:[...siteList.values()].map(x=>({...x,area:[...x.area],company:[...x.company]})),stats:{allRows,invalid,rowsWithSale,groups:rows.length,macroareaColumnPresent:hasMacroareaColumn,macroareas:[...macroareaCounts].map(([name,count])=>({name,count})).sort((a,b)=>b.count-a.count||a.name.localeCompare(b.name))},settings:{invoiceTolerance,cashTolerance,minSal}}
  }
  return {add,finalize}
 }
