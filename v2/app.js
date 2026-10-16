@@ -5,7 +5,7 @@ const $=id=>document.getElementById(id), fx=window.SALCore;
 const euroC=v=>new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR'}).format(v/100);
 const number=v=>new Intl.NumberFormat('it-IT').format(v);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let book=null,scope='test',network='all',testSites=new Set(),siteSearch='',focus='',tab='full-sal',term='',coefficient='',page=0,fileName='',review=new Map(),activeRows=[],currentRows=[];
+let book=null,scope='choose',network='all',selectedSite='',siteSearch='',focus='',tab='full-sal',term='',coefficient='',page=0,fileName='',review=new Map(),activeRows=[],currentRows=[];
 const PAGE=40;
 function err(t){$('error').hidden=!t;$('error').textContent=t||''}
 function loading(yes,message='',percentage=0){
@@ -34,9 +34,9 @@ function parse(file){
    try{
     const result=base.finalize(settings());
     if(!result.rows.length)throw Error('Non ho trovato pratiche con venduto positivo nel file.');
-    book={...result,sourceStore:base};fileName=file.name;review=new Map();network='all';scope='test';focus='';tab='full-sal';siteSearch='';term='';coefficient='';page=0;
+    book={...result,sourceStore:base};fileName=file.name;review=new Map();network='all';scope='choose';focus='';tab='full-sal';siteSearch='';term='';coefficient='';page=0;
     $('networkFilter').value='all';$('siteFilter').value='';$('search').value='';$('coef').value='';
-    testSites=defaultTen();renderAll();$('dashboard').hidden=false;
+    selectedSite='';renderAll();$('dashboard').hidden=false;
     $('fileLabel').textContent=fileName+' · '+number(result.stats.allRows)+' righe lette · '+number(result.sites.length)+' codici sede';
     $('inputInfo').textContent=number(file.size/1024/1024|0)+' MB · '+number(result.stats.allRows)+' righe · '+number(result.sites.length)+' sedi';
     loading(false);
@@ -46,23 +46,16 @@ function parse(file){
  });
 }
 function settings(){return {invoiceTolerance:Number($('tolInvoice').value),cashTolerance:Number($('tolCash').value),minSal:Number($('tolSal').value)}}
-function defaultTen(){
- if(!book)return new Set();
- const avail=book.sites.filter(s=>s.withSale>0);
- const direct=avail.filter(s=>s.network==='IT-Dirette').sort((a,b)=>b.withSale-a.withSale).slice(0,5);
- const franchise=avail.filter(s=>s.network==='IT-Franchising').sort((a,b)=>b.withSale-a.withSale).slice(0,5);
- const keys=[...direct,...franchise].map(x=>x.key);
- for(const s of [...avail].sort((a,b)=>b.withSale-a.withSale)){if(keys.length>=10)break;if(!keys.includes(s.key))keys.push(s.key)}
- return new Set(keys)
-}
 function keepSite(s){
- return (scope==='all'||testSites.has(s.key))&&(network==='all'||s.network===network)&&(!siteSearch||s.code.toLowerCase().includes(siteSearch.toLowerCase()));
+ return (scope==='all'||selectedSite===s.key)&&(network==='all'||s.network===network)&&(!siteSearch||s.code.toLowerCase().includes(siteSearch.toLowerCase()));
 }
 function scoped(){const ids=new Set(book.sites.filter(keepSite).map(s=>s.key));return book.rows.filter(x=>ids.has(x.siteKey))}
 function renderAll(){
  if(!book)return;
  document.querySelectorAll('[data-scope]').forEach(el=>el.classList.toggle('on',el.dataset.scope===scope));
- $('siteSelection').hidden=scope!=='test';
+ $('siteSelection').hidden=scope!=='choose';
+ const hasSelection=scope==='all'||Boolean(selectedSite);
+ $('emptyState').hidden=hasSelection;$('results').hidden=!hasSelection;
  const scopedSites=book.sites.filter(keepSite);activeRows=scoped();
  const totals=fx.summary(activeRows);
  $('scopeDescription').textContent=scopedSites.length+' sedi selezionate · '+(network==='all'?'Dirette + franchising':network);
@@ -79,10 +72,12 @@ function renderAll(){
  renderSiteSelection();renderSites();renderTabs();renderDetails();
 }
 function renderSiteSelection(){
- $('selectedCount').textContent='('+testSites.size+' selezionate)';
- const arr=book.sites.filter(s=>s.withSale>0).sort((a,b)=>a.code.localeCompare(b.code));
- $('siteChecks').innerHTML=arr.map(s=>'<label title="'+esc(s.network)+'"><input type="checkbox" data-site="'+esc(s.key)+'" '+(testSites.has(s.key)?'checked':'')+'><span>'+esc(s.code)+'</span></label>').join('');
+ const arr=book.sites.filter(s=>s.withSale>0&&(network==='all'||s.network===network)).sort((a,b)=>a.code.localeCompare(b.code)||a.network.localeCompare(b.network));
+ $('chosenSite').innerHTML='<option value="">— Seleziona una sede —</option>'+arr.map(s=>'<option value="'+esc(s.key)+'">'+esc(s.code)+' · '+esc(s.network==='IT-Franchising'?'Franchising':'Diretta')+'</option>').join('');
+ $('chosenSite').value=arr.some(s=>s.key===selectedSite)?selectedSite:'';
+ $('chosenHint').textContent=selectedSite?'Report della sede selezionata. Puoi cambiare sede in qualsiasi momento.':arr.length+' sedi disponibili. Nessuna selezione predefinita.';
 }
+
 function renderSites(){
  const groups=new Map();
  for(const r of activeRows){if(!groups.has(r.siteKey))groups.set(r.siteKey,[]);groups.get(r.siteKey).push(r)}
@@ -179,10 +174,10 @@ $('drop').ondragover=()=>{$('drop').classList.add('dragging')};
 $('drop').ondragleave=()=>{$('drop').classList.remove('dragging')};
 $('drop').ondrop=e=>{$('drop').classList.remove('dragging');parse(e.dataTransfer.files[0])};
 document.querySelectorAll('[data-scope]').forEach(b=>b.onclick=()=>showScope(b.dataset.scope));
-$('networkFilter').onchange=e=>{network=e.target.value;focus='';page=0;renderAll()};
+$('networkFilter').onchange=e=>{network=e.target.value;selectedSite='';focus='';page=0;renderAll()};
 $('siteFilter').oninput=e=>{siteSearch=e.target.value.trim();focus='';page=0;renderAll()};
-$('resetTest').onclick=()=>{testSites=defaultTen();focus='';renderAll()};
-$('siteChecks').onchange=e=>{const chk=e.target.closest('input[data-site]');if(!chk)return;chk.checked?testSites.add(chk.dataset.site):testSites.delete(chk.dataset.site);focus='';page=0;renderAll()};
+$('clearSite').onclick=()=>{selectedSite='';focus='';page=0;renderAll()};
+$('chosenSite').onchange=e=>{selectedSite=e.target.value;focus='';page=0;renderAll()};
 $('recalculate').onclick=recalculating;
 $('siteTable').onclick=e=>{const tr=e.target.closest('tr[data-focus]');if(!tr)return;focus=tr.dataset.focus;tab='full-sal';page=0;term='';coefficient='';$('search').value='';$('coef').value='';renderSites();renderTabs();renderDetails();$('tabs').scrollIntoView({behavior:'smooth',block:'start'})};
 $('clearFocus').onclick=()=>{focus='';renderSites();renderDetails()};
