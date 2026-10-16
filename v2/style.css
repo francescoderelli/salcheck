@@ -57,3 +57,7 @@
 .scenario-picker.has-choice{border-color:#77ac88;background:#f0f9f2;color:#175a35;font-weight:720}
 .scenario-picker:focus-visible{outline:2px solid #2475b1;outline-offset:1px}
 .simulated-amount{color:#17683e!important;white-space:nowrap}
+
+/* Base imponibile fattura calcolata o simulata, visibile in tutte le categorie */
+.taxable-chosen{color:#17683e!important;font-weight:730;white-space:nowrap}
+.taxable-unknown{color:#91a3af}
