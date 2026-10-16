@@ -28,3 +28,15 @@ Sull'export `STATI_Pratiche_creat_1792136302893.csv` (154.883 righe), caricare i
 
 ## Deploy
 Il branch sperimentale resta separato. Per rendere la V2 accessibile senza sostituire la V1, gli stessi file `v2/index.html`, `v2/style.css`, `v2/engine.js`, `v2/app.js` vengono copiati manualmente nella cartella `/v2` di `main`. Le modifiche future sul branch non aggiornano la pagina di anteprima finché non vengono sincronizzate.
+
+## Revisione manuale e totali dinamici
+
+Il menu `Verifica` nel dettaglio delle pratiche comprende quattro stati:
+- **Da verificare**: la pratica partecipa normalmente ai SAL potenziali;
+- **Lavoro eseguito**: resta nel SAL potenziale, perché la lavorazione risulta da verificare/caricare;
+- **Acconto**: viene sottratta dal SAL potenziale finché non è comprovata l'esecuzione;
+- **Da escludere**: viene sottratta dal SAL potenziale, per esempio per errori dell'export Albert o SAL già registrati.
+
+Il cambio di stato aggiorna immediatamente KPI, totali per sede, totali per anno e fogli di riepilogo Excel. **Non modifica** Venduto, Prodotto, Fatturato o Incassato e **non elimina la commessa** dal dettaglio: rimane visibile, evidenziata e auditabile. L'export contiene sia il SAL teorico originale sia il SAL conteggiato dopo le esclusioni; è presente anche il foglio `Escluse e acconti`.
+
+Le decisioni sono persistite esclusivamente nel `localStorage` del browser per combinazione di sede, codice pratica e quattro importi economici. Se gli importi cambiano su un export successivo, un'esclusione precedente non viene riapplicata automaticamente. Non esiste sincronizzazione fra browser, account o colleghi: per condividere le verifiche usare il report Excel.
