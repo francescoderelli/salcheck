@@ -8,3 +8,10 @@
 .review-excluded td{background:#fbf5ef!important;color:#8f7a6c}
 .review-excluded .money-strong{color:#9e8a77}
 .review-excluded .review{border:1px solid #d9a86e;background:#fff5e8;color:#8a581c;font-weight:700}
+
+/* Ordinamento colonne: solo interfaccia, nessuna modifica ai valori economici */
+.sort-head{display:inline-flex;align-items:center;justify-content:flex-end;gap:5px;border:0;background:transparent;padding:3px 0;text-align:right;color:inherit;font:inherit;font-weight:780;cursor:pointer}
+.sort-head:hover,.sort-head:focus-visible{color:#126da3;text-decoration:underline;text-underline-offset:3px}
+.sort-head:focus-visible{outline:2px solid #1975b2;outline-offset:3px;border-radius:3px}
+.sort-head.is-sorted{color:#155a8b}
+.sort-indicator{font-size:15px;display:inline-block;min-width:12px;text-align:center}
