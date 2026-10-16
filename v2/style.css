@@ -3,3 +3,8 @@
 .empty-state{background:#fff;border:1px dashed #b7cada;border-radius:15px;text-align:center;padding:35px 20px;margin-top:17px;color:#365c76}
 .empty-state .empty-icon{font-size:33px;margin-bottom:8px}.empty-state strong{font-size:18px}.empty-state p{margin:8px auto 0;max-width:440px}
 #results[hidden],#emptyState[hidden]{display:none}
+
+.review-instructions{margin:4px 0 10px;padding:10px 12px;background:#eaf3f9;border:1px solid #d5e5f1;border-radius:9px;color:#3c627e}
+.review-excluded td{background:#fbf5ef!important;color:#8f7a6c}
+.review-excluded .money-strong{color:#9e8a77}
+.review-excluded .review{border:1px solid #d9a86e;background:#fff5e8;color:#8a581c;font-weight:700}
