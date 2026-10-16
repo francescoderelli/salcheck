@@ -19,3 +19,14 @@ Non caricare dati aziendali nel repository. Excel letti esclusivamente nel brows
 - Verona: 760 righe; 24 pratiche con SAL residuo per €14.075,37.
 
 Report gestionale, non certificazione contabile.
+
+## Secondo controllo: fatturazione non riconciliata ma già incassata
+
+È disponibile la sezione **SAL su incassi parziali / sconti**. Individua le righe in cui:
+- il fatturato non coincide con il 100% del venduto sotto alcuno dei cinque regimi compatibili;
+- il totale fatturato (netto a pagare) è già stato incassato integralmente;
+- almeno uno dei regimi 100%, 106%, 110%, 118%, 122% implica un imponibile fatturato superiore al prodotto registrato.
+  
+Per ogni regime compatibile con venduto e fatturato, la base stimata è `Fatturato netto / coefficiente` e il possibile SAL è `max(0, imponibile stimato - Prodotto)`. Poiché il solo export non identifica il regime IVA effettivo, la tabella riporta il **minimo e il massimo**, il dettaglio dei singoli coefficienti e un foglio Excel dedicato. La presenza di acconti, fatture parziali o sconti richiede comunque verifica prima di registrare ricavi. Il nuovo controllo rimane separato dal report originario delle pratiche completamente fatturate/incassate.
+
+**Esempio:** venduto €50.000, prodotto €25.000, fatturato netto/incassato €35.000 → SAL teorico da €3.688,52 (coefficiente 122%) a €10.000 (coefficiente 100%).
