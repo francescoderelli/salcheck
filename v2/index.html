@@ -15,6 +15,7 @@
 <div class="config">
 <div class="config-cell"><label>Modalità</label><div class="toggle"><button type="button" class="on" data-scope="choose">Scegli la sede</button><button type="button" data-scope="all">Tutte le sedi</button></div><span class="hint">Nessuna sede preselezionata: scegli quella da analizzare oppure visualizza tutta la rete.</span></div>
 <div class="config-cell"><label>Tipologia rete</label><select id="networkFilter"><option value="all">Dirette + franchising</option><option value="IT-Dirette">Solo dirette</option><option value="IT-Franchising">Solo franchising</option></select></div>
+<div class="config-cell"><label for="yearFilter">Anno creazione pratica</label><select id="yearFilter"><option value="">Tutti gli anni</option></select><span class="hint" id="yearInfo">Anni disponibili dopo il caricamento</span></div>
 <div class="config-cell"><label>Ricerca sede</label><input type="search" id="siteFilter" placeholder="Codice sede, es. EDAC_BS"><span class="hint">Seleziona una riga del riepilogo per il dettaglio.</span></div>
 <div class="config-cell"><label>Tolleranze (€)</label><div class="tolerances"><input id="tolInvoice" type="number" min="0" step=".01" value="1" title="Scarto fatturato"><input id="tolCash" type="number" min="0" step=".01" value=".02" title="Scarto incasso"><input id="tolSal" type="number" min="0" step=".01" value="1" title="SAL minimo"></div><span class="hint">Fatturato / Incasso / SAL minimo</span><button class="secondary tiny" id="recalculate">Ricalcola</button></div>
 </div>
