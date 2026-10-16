@@ -53,6 +53,13 @@ function store(){
    const full=fullAggregate||allLineMatch;
    const lineFx=allLineMatch?[...new Set(saleLines.map(x=>FX.map(f=>({fx:f,delta:Math.abs(x[1]-cent((x[0]/100)*f.v))})).sort((a,b)=>a.delta-b.delta)[0].fx.label))].join(" + "):"";
    const coefficient=fullAggregate?invoiceMatches[0].fx.label:(allLineMatch?lineFx:"");
+   // Imponibile dedotto dal fatturato netto a pagare e dal coefficiente fiscale riconciliato.
+   // Per fatture con più componenti IVA, si sommano le basi delle singole righe.
+   const invoiceBase=fullAggregate?cent((g.invoiced/100)/invoiceMatches[0].fx.v):
+    allLineMatch?saleLines.reduce((sum,line)=>{
+      const match=FX.map(f=>({fx:f,delta:Math.abs(line[1]-cent((line[0]/100)*f.v))})).sort((a,b)=>a.delta-b.delta)[0].fx;
+      return sum+cent((line[1]/100)/match.v);
+    },0):null;
    const cashOk=g.invoiced>0&&close(g.invoiced,g.collected,cashTol);
    const paid=full&&cashOk;
    const remaining=g.sold-g.produced;
@@ -66,7 +73,7 @@ function store(){
    rows.push({
     key:g.key,siteKey:g.siteKey,code:g.code,year:g.year,yearConflict:g.yearConflict,site:g.site,network:g.network,company:g.company,area:g.area,
     address:g.address,state:[...g.states].filter(Boolean).join(", "),venduto:g.sold,prodotto:g.produced,fatturato:g.invoiced,incassato:g.collected,
-    lines:g.lines,duplicate:g.lines>1,sameFinance:g.sameFinance,coefficient,full,paid,cashOk,remaining,fullSal,partial,scenarios,pMin,pMax,
+    lines:g.lines,duplicate:g.lines>1,sameFinance:g.sameFinance,coefficient,invoiceBase,full,paid,cashOk,remaining,fullSal,partial,scenarios,pMin,pMax,
     kind
    })
   }
