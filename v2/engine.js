@@ -5,8 +5,14 @@ const FX=[{v:1,label:"100%"},{v:1.06,label:"106%"},{v:1.10,label:"110%"},{v:1.18
 const n=x=>{if(typeof x==="number")return x;let s=String(x??"").trim().replace(/[€\s]/g,"");if(!s)return 0;if(s.includes(",")&&s.includes("."))s=s.lastIndexOf(",")>s.lastIndexOf(".")?s.replace(/\./g,"").replace(",","."):s.replace(/,/g,"");else if(s.includes(","))s=s.replace(/\./g,"").replace(",",".");return Number(s)};
 const cent=x=>Math.round((Number(x)+Number.EPSILON)*100);
 const close=(a,b,t)=>Math.abs(a-b)<=t;
+function yearFromDate(date,code){
+ const d=String(date??"").trim();
+ let m=/^(20\d{2})[-/]/.exec(d);if(m)return m[1];
+ m=/^\d{1,2}[-/]\d{1,2}[-/](20\d{2})/.exec(d);if(m)return m[1];
+ m=/^(\d{2})IT/.exec(String(code||""));return m?"20"+m[1]:"";
+}
 function rowFromRaw(x){const value=k=>n(x[k]);return {
-  code:String(x.CodiceCommessa||"").trim(),site:String(x.Sede||"").trim(),network:String(x.CountryRete||"Non indicata").trim(),
+  code:String(x.CodiceCommessa||"").trim(),year:yearFromDate(x.DataCreazionePratica,x.CodiceCommessa),site:String(x.Sede||"").trim(),network:String(x.CountryRete||"Non indicata").trim(),
   company:String(x.CodiceSocieta||"").trim(),area:String(x.macroarea||"").trim(),
   state:String(x.StatoPratica||"").trim(),address:String(x.Indirizzo||"").trim(),
   venduto:cent(value("Venduto€")),prodotto:cent(value("ProdottoLordo€")),
@@ -23,9 +29,10 @@ function store(){
   if(!r.venduto&&!r.prodotto&&!r.fatturato&&!r.incassato)return;
   const key=sk+"\u001f"+r.code;
   let group=map.get(key);
-  if(!group){group={key,siteKey:sk,code:r.code,site:r.site,network:r.network,company:r.company,area:r.area,address:r.address,state:r.state,
+  if(!group){group={key,siteKey:sk,code:r.code,year:r.year,yearConflict:false,site:r.site,network:r.network,company:r.company,area:r.area,address:r.address,state:r.state,
     sold:0,produced:0,invoiced:0,collected:0,lines:0,lineFinance:[],states:new Set(),sameFinance:false,signatures:new Set()};map.set(key,group)}
   group.sold+=r.venduto;group.produced+=r.prodotto;group.invoiced+=r.fatturato;group.collected+=r.incassato;group.lines++;
+  if(!group.year&&r.year)group.year=r.year;else if(group.year&&r.year&&group.year!==r.year)group.yearConflict=true;
   group.states.add(r.state);if(!group.address&&r.address)group.address=r.address;
   if(!group.company&&r.company)group.company=r.company;
   const sig=[r.venduto,r.prodotto,r.fatturato,r.incassato].join("/");
@@ -54,7 +61,7 @@ function store(){
    const pMin=scenarios.length?Math.min(...scenarios.map(x=>x.gap)):0,pMax=scenarios.length?Math.max(...scenarios.map(x=>x.gap)):0;
    const kind=fullSal?"full-sal":partial?"partial-sal":paid?"fully-paid":full?"invoiced-unpaid":"other";
    rows.push({
-    key:g.key,siteKey:g.siteKey,code:g.code,site:g.site,network:g.network,company:g.company,area:g.area,
+    key:g.key,siteKey:g.siteKey,code:g.code,year:g.year,yearConflict:g.yearConflict,site:g.site,network:g.network,company:g.company,area:g.area,
     address:g.address,state:[...g.states].filter(Boolean).join(", "),venduto:g.sold,prodotto:g.produced,fatturato:g.invoiced,incassato:g.collected,
     lines:g.lines,duplicate:g.lines>1,sameFinance:g.sameFinance,coefficient,full,paid,cashOk,remaining,fullSal,partial,scenarios,pMin,pMax,
     kind
