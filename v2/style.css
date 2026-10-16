@@ -48,3 +48,6 @@
 .file-scope strong{font-weight:780}
 .file-scope #fileMacroareas{font-weight:700}
 .file-scope p{font-size:12px;color:#637e92;margin:3px 0 0}
+
+/* Controllo macroarea — tutte le tipologie, comprese N/A e non classificata */
+@media(min-width:1101px){.config{grid-template-columns:1.45fr 1fr .9fr .9fr 1.3fr}}
