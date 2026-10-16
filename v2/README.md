@@ -5,8 +5,8 @@ Versione sperimentale sul branch `feature/v2-spa-nazionale`. **La V1 rimane inal
 ## Utilizzo
 1. Aprire `https://francescoderelli.github.io/salcheck/v2/`.
 2. Caricare un CSV Stati pratiche contenente `CountryRete`, `Sede`, `CodiceCommessa`, `Venduto€`, `ProdottoLordo€`, `FatturatoTotale€`, `IncassatoTotale€`.
-3. La modalità iniziale sceglie 5 sedi dirette e 5 franchising con più righe vendute nel CSV. Le sedi del test sono modificabili e si può selezionare l'intero export.
-4. Filtrare per rete, per sede e per categoria. Esportare Excel riepilogativo oppure CSV filtrato.
+3. L'opzione iniziale **Scegli la sede** non preseleziona nulla: il report rimane vuoto finché l'utente seleziona dal menu una sede diretta o franchising. Il menu mostra soltanto le sedi compatibili con il filtro rete.
+4. Passare a **Tutte le sedi** per il consolidato completo. Filtrare per rete e categoria ed esportare Excel riepilogativo oppure CSV filtrato.
 
 ## Calcolo
 - Il **Preventivato** non entra mai nei calcoli.
@@ -21,7 +21,7 @@ Versione sperimentale sul branch `feature/v2-spa-nazionale`. **La V1 rimane inal
 La lettura CSV avviene a blocchi con Papa Parse usando un Web Worker; i dati non vengono inviati al server. L'export Excel è generato localmente da SheetJS. Non caricare i CSV aziendali su GitHub.
 
 ## Prima verifica riproducibile
-Sull'export `STATI_Pratiche_creat_1792136302893.csv` (154.883 righe), la selezione automatica di 10 sedi include 5 dirette e 5 franchising, circa 12.805 commesse vendute aggregate. Stima indipendente: 236 pratiche con SAL su fatture complete per €128.376,51; 198 pratiche con SAL su incassi parziali/sconti, intervallo teorico complessivo da €110.447,00 a €201.829,79. Questi importi sono da confrontare col risultato del browser e possono richiedere piccoli aggiustamenti per arrotondamenti.
+Sull'export `STATI_Pratiche_creat_1792136302893.csv` (154.883 righe), caricare il file, scegliere una singola sede nel menu, verificare i due controlli SAL e poi selezionare **Tutte le sedi** per il riepilogo complessivo. La vecchia selezione automatica delle 10 sedi è stata rimossa per evitare di presentare dati non richiesti. L'analisi economica è invariata.
 
 **Importante:** il CSV di riferimento contiene solo `macroarea=NORD`; non equivale a un export nazionale completo.
 
