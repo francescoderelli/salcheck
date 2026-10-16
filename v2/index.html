@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="it"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#122942"><meta name="description" content="SALCheck V2 — Analisi nazionale dei SAL non registrati, dirette e franchising">
+<title>SALCheck V2 · Rete Italia</title>
+<link rel="stylesheet" href="./style.css">
+</head><body>
+<header class="top"><div class="brand"><span class="brand-icon">S</span><div><strong>SALCheck <span>V2</span></strong><small>Rete Italia · Controllo economico commesse</small></div></div><span class="top-status">● Analisi locale · CSV</span></header>
+<main>
+<div class="hero"><div><p class="eyebrow">CONTROLLO SAL · DIRETTE E FRANCHISING</p><h1>Un solo file. Tutta la rete sotto controllo.</h1><p>Carica un CSV <b>Stati pratiche</b> con colonna Sede. Analizziamo venduto, prodotto, fatturato netto e incassato, senza utilizzare il preventivato.</p></div><div class="hero-tags"><span>01 · Importa CSV</span><span>02 · Seleziona sedi</span><span>03 · Esamina anomalie</span></div></div>
+<section class="upload" id="drop"><div class="upload-icon">↑</div><div><strong>Trascina qui il file CSV a 26 colonne</strong><p>Oppure seleziona il file esportato dalla dashboard Albert. I dati restano sul tuo computer.</p><span class="hint" id="fileLabel">Nessun file caricato</span></div><div><button id="selectFile" class="primary">Seleziona CSV</button><input type="file" id="file" accept=".csv,text/csv" hidden></div></section>
+<div class="progress" id="progress" hidden><div class="progress-line"><div id="progressBar"></div></div><span id="progressText">Lettura CSV…</span></div>
+<div id="error" class="alert danger" hidden></div>
+<section id="dashboard" hidden>
+<div class="section-head"><div><p class="eyebrow">CONFIGURA LA VISTA</p><h2>Perimetro dell'analisi</h2></div><span class="hint" id="inputInfo"></span></div>
+<div class="config">
+<div class="config-cell"><label>Modalità</label><div class="toggle"><button type="button" class="on" data-scope="test">10 sedi · Test</button><button type="button" data-scope="all">Tutte le sedi</button></div><span class="hint">Il test parte da 5 dirette e 5 franchising, modificabili.</span></div>
+<div class="config-cell"><label>Tipologia rete</label><select id="networkFilter"><option value="all">Dirette + franchising</option><option value="IT-Dirette">Solo dirette</option><option value="IT-Franchising">Solo franchising</option></select></div>
+<div class="config-cell"><label>Ricerca sede</label><input type="search" id="siteFilter" placeholder="Codice sede, es. EDAC_BS"><span class="hint">Seleziona una riga del riepilogo per il dettaglio.</span></div>
+<div class="config-cell"><label>Tolleranze (€)</label><div class="tolerances"><input id="tolInvoice" type="number" min="0" step=".01" value="1" title="Scarto fatturato"><input id="tolCash" type="number" min="0" step=".01" value=".02" title="Scarto incasso"><input id="tolSal" type="number" min="0" step=".01" value="1" title="SAL minimo"></div><span class="hint">Fatturato / Incasso / SAL minimo</span><button class="secondary tiny" id="recalculate">Ricalcola</button></div>
+</div>
+<div class="selection" id="siteSelection"><div class="selection-heading"><strong>Sedi incluse nel test <span id="selectedCount" class="muted"></span></strong><button class="text-btn" id="resetTest">Ripristina 10 sedi</button></div><div id="siteChecks" class="site-checks"></div></div>
+<div class="section-head metrics-title"><div><p class="eyebrow">RISULTATI CONSOLIDATI</p><h2>Cruscotto economico</h2><p class="hint" id="scopeDescription"></p></div><button id="exportExcel" class="primary">Esporta report Excel</button></div>
+<div class="metrics"><div class="metric"><span>Pratiche vendute</span><strong id="kPrat">—</strong><small id="kSold">—</small></div><div class="metric"><span>Fatturate e incassate</span><strong id="kPaid">—</strong><small id="kPaidInfo">—</small></div><div class="metric main-kpi"><span>SAL su fatture complete</span><strong id="kFull">—</strong><small id="kFullInfo">—</small></div><div class="metric"><span>SAL su incassi parziali / sconti</span><strong id="kPartial">—</strong><small id="kPartialInfo">—</small></div></div>
+<div id="alerts" class="alert" hidden></div>
+<div class="report-card"><div class="card-head"><div><h2>Classifica sedi</h2><p>Ogni riga apre le pratiche della sede selezionata. Le due categorie SAL restano separate.</p></div><button id="clearFocus" class="secondary tiny" hidden>← Torna a tutte le sedi</button></div><div class="table-scroll"><table class="site-table"><thead><tr><th>Sede</th><th>Rete</th><th class="numeric">Pratiche vendute</th><th class="numeric">SAL fatture complete</th><th class="numeric">SAL sconti / parziali (min–max)</th><th class="numeric">Anomalie</th></tr></thead><tbody id="siteTable"></tbody></table></div></div>
+<div class="report-card"><div class="card-head"><div><h2>Dettaglio pratiche</h2><p id="detailDescription">Esamina le commesse e verifica manualmente il SAL prima di registrarlo.</p></div><span id="focusTag" class="focus" hidden></span></div>
+<div class="tabs" id="tabs"><button class="active" data-tab="full-sal">SAL fatture complete</button><button data-tab="partial-sal">SAL incassi parziali</button><button data-tab="fully-paid">Fatturate e incassate</button><button data-tab="invoiced-unpaid">Fatturate non incassate</button><button data-tab="other">Non riconciliate</button><button data-tab="all">Tutte</button></div>
+<div class="toolbar"><input id="search" type="search" placeholder="Cerca codice commessa, indirizzo o sede…"><select id="coef"><option value="">Tutti i regimi</option><option>100%</option><option>106%</option><option>110%</option><option>118%</option><option>122%</option></select><span class="hint" id="detailCount"></span><button id="exportCSV" class="secondary tiny">Scarica CSV filtrato</button></div>
+<div class="table-scroll"><table><thead id="detailHead"></thead><tbody id="detailTable"></tbody></table></div><div class="pager"><span id="pageInfo"></span><button id="prev" class="secondary tiny">← Precedenti</button><button id="next" class="secondary tiny">Successive →</button></div></div>
+<div class="alert info"><b>Verifica necessaria.</b> Incasso e fatturazione non dimostrano che il lavoro sia stato eseguito. Nei casi di sconto, IVA mista o fatturazione parziale, il SAL teorico è un intervallo e non un importo certo. Le commesse con più righe restano tracciabili.</div>
+</section>
+<footer>SALCheck V2 · Elaborazione esclusivamente nel browser · Nessun CSV aziendale salvato su GitHub</footer>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.5.3/papaparse.min.js"></script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+<script src="./engine.js"></script><script src="./app.js"></script>
+</body></html>
