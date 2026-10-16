@@ -73,8 +73,8 @@ function renderAll(){
 }
 function renderSiteSelection(){
  const arr=book.sites.filter(s=>s.withSale>0&&(network==='all'||s.network===network)).sort((a,b)=>a.code.localeCompare(b.code)||a.network.localeCompare(b.network));
- $('chosenSite').innerHTML='<option value="">— Seleziona una sede —</option>'+arr.map(s=>'<option value="'+esc(s.key)+'">'+esc(s.code)+' · '+esc(s.network==='IT-Franchising'?'Franchising':'Diretta')+'</option>').join('');
- $('chosenSite').value=arr.some(s=>s.key===selectedSite)?selectedSite:'';
+ $('chosenSite').innerHTML='<option value="">— Seleziona una sede —</option>'+arr.map(s=>'<option value="'+encodeURIComponent(s.key)+'">'+esc(s.code)+' · '+esc(s.network==='IT-Franchising'?'Franchising':'Diretta')+'</option>').join('');
+ $('chosenSite').value=arr.some(s=>s.key===selectedSite)?encodeURIComponent(selectedSite):'';
  $('chosenHint').textContent=selectedSite?'Report della sede selezionata. Puoi cambiare sede in qualsiasi momento.':arr.length+' sedi disponibili. Nessuna selezione predefinita.';
 }
 
@@ -177,7 +177,7 @@ document.querySelectorAll('[data-scope]').forEach(b=>b.onclick=()=>showScope(b.d
 $('networkFilter').onchange=e=>{network=e.target.value;selectedSite='';focus='';page=0;renderAll()};
 $('siteFilter').oninput=e=>{siteSearch=e.target.value.trim();focus='';page=0;renderAll()};
 $('clearSite').onclick=()=>{selectedSite='';focus='';page=0;renderAll()};
-$('chosenSite').onchange=e=>{selectedSite=e.target.value;focus='';page=0;renderAll()};
+$('chosenSite').onchange=e=>{selectedSite=e.target.value?decodeURIComponent(e.target.value):'';focus='';page=0;renderAll()};
 $('recalculate').onclick=recalculating;
 $('siteTable').onclick=e=>{const tr=e.target.closest('tr[data-focus]');if(!tr)return;focus=tr.dataset.focus;tab='full-sal';page=0;term='';coefficient='';$('search').value='';$('coef').value='';renderSites();renderTabs();renderDetails();$('tabs').scrollIntoView({behavior:'smooth',block:'start'})};
 $('clearFocus').onclick=()=>{focus='';renderSites();renderDetails()};
