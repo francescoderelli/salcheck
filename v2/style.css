@@ -83,3 +83,6 @@
  .report-card{padding:10px}
  .detail-table .scenario-picker{min-width:165px}
 }
+
+/* Bank withholding on tax-relief transfers: informational only; no change to invoice IVA */
+.withholding-marker{font-size:10px;font-weight:700;color:#246b87;line-height:1.25;white-space:normal;margin-top:4px}
