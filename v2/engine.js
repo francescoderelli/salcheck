@@ -60,7 +60,17 @@ function store(){
       const match=FX.map(f=>({fx:f,delta:Math.abs(line[1]-cent((line[0]/100)*f.v))})).sort((a,b)=>a.delta-b.delta)[0].fx;
       return sum+cent((line[1]/100)/match.v);
     },0):null;
-   const cashOk=g.invoiced>0&&close(g.invoiced,g.collected,cashTol);
+   // Bonifici parlanti: la banca scorpora convenzionalmente il 22% IVA dal
+   // BONIFICO LORDO e trattiene l'11% di tale base (non dell'imponibile fattura).
+   // Riconosciamo solo importi riconciliati entro la tolleranza di incasso.
+   // Questo test identifica compatibilità economica, non prova il tipo di bonifico.
+   const normalCashOk=g.invoiced>0&&close(g.invoiced,g.collected,cashTol);
+   const withholdingBase=g.invoiced>0?cent((g.invoiced/100)/1.22):0;
+   const withholding11=cent((withholdingBase/100)*.11);
+   const expectedCash11=g.invoiced-withholding11;
+   const cashWithholding11=!normalCashOk&&g.invoiced>0&&g.collected>0&&withholding11>0&&close(expectedCash11,g.collected,cashTol);
+   const cashOk=normalCashOk||cashWithholding11;
+   const cashMethod=normalCashOk?'Incasso ordinario':cashWithholding11?'Compatibile bonifico parlante 11%':'Da riconciliare';
    const paid=full&&cashOk;
    const remaining=g.sold-g.produced;
    const fullSal=paid&&remaining>min;
@@ -73,7 +83,9 @@ function store(){
    rows.push({
     key:g.key,siteKey:g.siteKey,code:g.code,year:g.year,yearConflict:g.yearConflict,site:g.site,network:g.network,company:g.company,area:g.area,
     address:g.address,state:[...g.states].filter(Boolean).join(", "),venduto:g.sold,prodotto:g.produced,fatturato:g.invoiced,incassato:g.collected,
-    lines:g.lines,duplicate:g.lines>1,sameFinance:g.sameFinance,coefficient,invoiceBase,full,paid,cashOk,remaining,fullSal,partial,scenarios,pMin,pMax,
+    lines:g.lines,duplicate:g.lines>1,sameFinance:g.sameFinance,coefficient,invoiceBase,
+    full,paid,cashOk,cashMethod,cashWithholding11,bankWithholding11:cashWithholding11?withholding11:0,
+    expectedCash11:cashWithholding11?expectedCash11:null,remaining,fullSal,partial,scenarios,pMin,pMax,
     kind
    })
   }
