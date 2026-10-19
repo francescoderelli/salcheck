@@ -5,7 +5,7 @@ const $=id=>document.getElementById(id), fx=window.SALCore;
 const euroC=v=>new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR'}).format(v/100);
 const number=v=>new Intl.NumberFormat('it-IT').format(v);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let book=null,scope='choose',network='all',selectedSites=new Set(),selectedMacroarea='',selectedYear='',siteSearchTerm='',focus='',tab='full-sal',term='',coefficient='',bankRate='',page=0,fileName='',review=new Map(),scenarioChoices=new Map(),activeRows=[],currentRows=[],rowLookup=new Map(),detailSort={key:'',dir:'asc'},siteSort={key:'',dir:'asc'};
+let book=null,scope='choose',network='all',selectedSites=new Set(),selectedMacroarea='',selectedYear='',siteSearchTerm='',focus='',tab='full-sal',term='',coefficient='',bankRate='',page=0,fileName='',review=new Map(),scenarioChoices=new Map(),raFeedback=new Map(),activeRows=[],currentRows=[],rowLookup=new Map(),detailSort={key:'',dir:'asc'},siteSort={key:'',dir:'asc'};
 const PAGE=40;
 const IVA_LABELS={
   '100%':'Reverse charge / split payment',
@@ -130,7 +130,13 @@ function parse(file){
    try{
     const result=base.finalize(settings());
     if(!result.rows.length)throw Error('Non ho trovato pratiche con venduto positivo nel file.');
-    book={...result,sourceStore:base};rowLookup=new Map(result.rows.map(r=>[r.key,r]));fileName=file.name;restoreReviews(result.rows);restoreScenarios(result.rows);network='all';scope='choose';selectedSites.clear();selectedMacroarea='';selectedYear='';siteSearchTerm='';focus='';tab='full-sal';term='';coefficient='';bankRate='';page=0;
+    book={...result,sourceStore:base};rowLookup=new Map(result.rows.map(r=>[r.key,r]));fileName=file.name;restoreReviews(result.rows);restoreScenarios(result.rows);raFeedback=new Map();$('raImportStatus').hidden=true;
+    const raNames=[...new Set(result.rows.map(r=>r.ra))];
+    const unassigned=result.rows.filter(r=>r.ra==='RA non indicato'||r.ra==='RA da verificare').length;
+    $('raOwnersInfo').textContent=result.stats.raColumnPresent?
+     number(raNames.length)+' RA/assegnazioni nel CSV · '+number(unassigned)+' pratiche con RA assente o discordante':
+     'Colonna Responsabile Area non presente nel CSV: controlla l’export Albert.';
+    network='all';scope='choose';selectedSites.clear();selectedMacroarea='';selectedYear='';siteSearchTerm='';focus='';tab='full-sal';term='';coefficient='';bankRate='';page=0;
     $('networkFilter').value='all';$('siteSearchInput').value='';$('search').value='';$('coef').value='';$('bankRateFilter').value='';
     renderMacroareas();
     setPickerOpen(false);
@@ -322,7 +328,7 @@ function renderDetails(){
    '"><button type="button" class="sort-head '+(selected?'is-sorted':'')+'" data-detail-sort="'+esc(x.key)+'" title="Ordina '+esc(x.label)+' per importo">'+esc(x.label)+' <span class="sort-indicator" aria-hidden="true">'+arrow+'</span></button></th>';
  }).join('')+'</tr>';
  $('detailTable').innerHTML=currentRows.slice(page*PAGE,(page+1)*PAGE).map(r=>{
-  let h='<tr class="'+(isExcluded(r)?'review-excluded':'')+'"><td><strong>'+esc(r.code)+'</strong><div class="original">'+esc(r.address).slice(0,70)+'</div></td><td>'+esc(r.year||'—')+'</td><td>'+esc(r.site)+'</td><td>'+esc(r.network==='IT-Franchising'?'Franchising':'Diretta')+'</td><td>'+esc(r.state)+'</td>';
+  let h='<tr class="'+(isExcluded(r)?'review-excluded':'')+'"><td><strong>'+esc(r.code)+'</strong><div class="original">'+esc(r.address).slice(0,70)+'</div>'+(raFeedback.has(r.key)?'<div class="ra-feedback-indicator">RA: '+esc(raFeedback.get(r.key).status||'Verifica ricevuta')+'</div>':'')+'</td><td>'+esc(r.year||'—')+'</td><td>'+esc(r.site)+'</td><td>'+esc(r.network==='IT-Franchising'?'Franchising':'Diretta')+'</td><td>'+esc(r.state)+'</td>';
   h+=moneyTd(r.venduto)+moneyTd(r.prodotto)+moneyTd(r.fatturato)+cashTd(r);
   if(tab==='partial-sal'){
     const result=simulatedRange(r);
@@ -342,7 +348,8 @@ function recalculating(){
 function showScope(mode){scope=mode;focus='';page=0;renderAll()}
 function exportRows(rows){return rows.map(r=>{
  const taxable=taxableBase(r);
- const data={'Commessa':r.code,'Anno delibera':r.year,'Sede':r.site,'Rete':r.network,'Società':r.company,'Macroarea':areaName(r.area),'Stato (informativo)':r.state,'Indirizzo':r.address,
+ const feedback=raFeedback.get(r.key);
+ const data={'Commessa':r.code,'Responsabile Area (RA)':r.ra,'Anno delibera':r.year,'Sede':r.site,'Rete':r.network,'Società':r.company,'Macroarea':areaName(r.area),'Stato (informativo)':r.state,'Indirizzo':r.address,
  'Venduto €':r.venduto/100,'Prodotto €':r.prodotto/100,'Fatturato netto a pagare €':r.fatturato/100,
  'Imponibile fattura calcolato €':taxable&&taxable.min===taxable.max?taxable.min/100:'',
  'Imponibile fattura minimo €':taxable?taxable.min/100:'',
@@ -355,6 +362,10 @@ function exportRows(rows){return rows.map(r=>{
  'Ritenuta bancaria teorica €':r.cashWithholdingRate?r.bankWithholding/100:'',
  'Incasso bancario atteso post ritenuta €':r.cashWithholdingRate?r.expectedCash/100:'',
  'Nota data bonifico':r.cashWithholdingRate?'Aliquota da confermare con data dell’accredito bancario, non con data delibera':'',
+ 'Esito verifica RA':feedback?.status||'','IVA verificata RA':feedback?.iva||'',
+ 'Ritenuta verificata RA':feedback?.bank||'',
+ 'SAL confermato RA €':feedback?.sal??'',
+ 'Note verifica RA':feedback?.notes||'','Data verifica RA':feedback?.at||'',
  'IVA fattura compatibile':ivaLabel(r.coefficient),'SAL venduto meno prodotto €':r.remaining/100,'SAL teorico min €':r.pMin/100,'SAL teorico max €':r.pMax/100,
  'Ipotesi IVA fattura':r.scenarios.map(x=>ivaLabel(x.fx)).join(' / '),'IVA fattura simulata':selectedScenario(r)?ivaLabel(selectedScenario(r).fx):'Da simulare',
  'SAL simulato €':selectedScenario(r)?selectedScenario(r).gap/100:'',
@@ -385,6 +396,155 @@ function downloadCSV(){
  const cols=Object.keys(data[0]),lines=[cols.map(csvSafe).join(';'),...data.map(x=>cols.map(k=>csvSafe(x[k])).join(';'))];
  const blob=new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='SALCheck_V2_'+tab+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
+
+const RA_OUTCOMES=['Da verificare','Da caricare','Già registrato','Lavoro non eseguito','Acconto','Errore contabile','Da approfondire','Da escludere'];
+const RA_BANK=['Nessuna','8%','11%','Da verificare'];
+const RA_COLUMNS=['Sede','Commessa','Anno delibera','Categoria','Venduto €','Prodotto €','Fatturato €','Incassato €','IVA fattura','Ritenuta bancaria compatibile','SAL potenziale min €','SAL potenziale max €','Esito RA','IVA verificata','Ritenuta verificata','SAL confermato €','Note RA','Data verifica','RA originale','ID pratica','Firma dati'];
+function raSignature(r){return [r.network,r.site,r.code,r.venduto,r.prodotto,r.fatturato,r.incassato].join('|')}
+function raRecord(r){
+ const f=raFeedback.get(r.key),v=r.partial?simulatedRange(r):{min:r.fullSal?r.remaining:0,max:r.fullSal?r.remaining:0};
+ return {'Sede':r.site,'Commessa':r.code,'Anno delibera':r.year,
+ 'Categoria':r.fullSal?'SAL fattura completa':'SAL incasso parziale',
+ 'Venduto €':r.venduto/100,'Prodotto €':r.prodotto/100,
+ 'Fatturato €':r.fatturato/100,'Incassato €':r.incassato/100,
+ 'IVA fattura':r.coefficient?ivaLabel(r.coefficient):(selectedScenario(r)?ivaLabel(selectedScenario(r).fx):'Da verificare'),
+ 'Ritenuta bancaria compatibile':r.cashWithholdingRate?r.cashWithholdingRate+'% (da confermare)':'Non riconosciuta',
+ 'SAL potenziale min €':isExcluded(r)?0:v.min/100,'SAL potenziale max €':isExcluded(r)?0:v.max/100,
+ 'Esito RA':f?.status||'','IVA verificata':f?.iva||'',
+ 'Ritenuta verificata':f?.bank||'','SAL confermato €':f?.sal??'',
+ 'Note RA':f?.notes||'','Data verifica':f?.at||'',
+ 'RA originale':r.ra,'ID pratica':encodeURIComponent(r.key),'Firma dati':raSignature(r)};
+}
+function raSafeSheet(name,used){
+ const s=String(name||'RA non indicato').replace(/[\/\\\[\]?*:]/g,'-').replace(/'/g,' ').trim()||'RA non indicato';
+ let x=s.slice(0,31),suffix=1;
+ while(used.has(x.toLocaleLowerCase('it'))){
+  const end=' ('+(++suffix)+')';
+  x=s.slice(0,31-end.length)+end;
+ }
+ used.add(x.toLocaleLowerCase('it'));return x;
+}
+function raStyle(sheet,rows,summary=false){
+ const widths=summary?[28,29,42,20,21,21,21,22]:
+  [19,20,15,24,17,17,17,17,26,28,22,22,24,27,24,22,43,19,30,47,47];
+ sheet['!cols']=widths.map(wch=>({wch}));
+ if(rows.length&&window.XLSX.utils.encode_col){
+  const cols=Object.keys(rows[0]);
+  sheet['!autofilter']={ref:'A1:'+window.XLSX.utils.encode_col(cols.length-1)+(rows.length+1)};
+ }
+ if(!window.XLSX.utils.encode_cell)return;
+ const cols=Object.keys(rows[0]||{});
+ for(let row=1;row<=rows.length;row++)for(let col=0;col<cols.length;col++){
+  if(!cols[col].endsWith('€'))continue;
+  const cell=sheet[window.XLSX.utils.encode_cell({r:row,c:col})];
+  if(cell&&cell.t==='n')cell.z='#,##0.00 "€"';
+ }
+}
+function exportRaWorkbook(){
+ if(!book){err('Carica prima il CSV Albert.');return}
+ if(!book.stats.raColumnPresent){err('Manca la colonna Responsabile Area / ResponsabileArea nell’export Albert.');return}
+ if(!window.XLSX){err('Il modulo Excel non è disponibile.');return}
+ const candidates=book.rows.filter(r=>r.fullSal||r.partial);
+ if(!candidates.length){err('Nessuna pratica con SAL potenziale da verificare.');return}
+ const grouped=new Map();
+ for(const r of candidates){
+  const k=r.ra.toLocaleLowerCase('it');
+  if(!grouped.has(k))grouped.set(k,{ra:r.ra,rows:[]});
+  grouped.get(k).rows.push(r);
+ }
+ const groups=[...grouped.values()].sort((a,b)=>a.ra.localeCompare(b.ra,'it'));
+ const wb=window.XLSX.utils.book_new(),used=new Set(['riepilogo ra','istruzioni']),overview=[];
+ for(const g of groups){
+  g.rows.sort((a,b)=>a.site.localeCompare(b.site,'it')||a.code.localeCompare(b.code,'it'));
+  g.sheetName=raSafeSheet(g.ra,used);
+  const docs=g.rows.map(raRecord);
+  g.sheet=window.XLSX.utils.json_to_sheet(docs,{header:RA_COLUMNS});
+  raStyle(g.sheet,docs);
+  overview.push({
+   'Responsabile Area (RA)':g.ra,'Foglio':g.sheetName,
+   'Sedi gestite':[...new Set(g.rows.map(r=>r.site))].sort().join(' · '),
+   'Pratiche da verificare':g.rows.length,
+   'SAL fatture complete €':g.rows.filter(r=>r.fullSal&&!isExcluded(r)).reduce((s,r)=>s+r.remaining,0)/100,
+   'SAL parziale min €':g.rows.filter(r=>r.partial&&!isExcluded(r)).reduce((s,r)=>s+simulatedRange(r).min,0)/100,
+   'SAL parziale max €':g.rows.filter(r=>r.partial&&!isExcluded(r)).reduce((s,r)=>s+simulatedRange(r).max,0)/100,
+   'Esiti RA caricati':g.rows.filter(r=>raFeedback.has(r.key)).length
+  });
+ }
+ const summary=window.XLSX.utils.json_to_sheet(overview);raStyle(summary,overview,true);
+ window.XLSX.utils.book_append_sheet(wb,summary,'Riepilogo RA');
+ const instructions=[
+ {Voce:'DESTINATARI',Indicazioni:'Un unico master nazionale, con un foglio per ciascun RA (Responsabile Area), non per Area Manager.'},
+ {Voce:'PRATICHE',Indicazioni:'Solo commesse con SAL potenziale su fattura completa o incasso parziale; ogni RA riceve le sedi di sua competenza.'},
+ {Voce:'CELLE DA COMPILARE',Indicazioni:'Esito RA, IVA verificata, Ritenuta verificata, SAL confermato €, Note RA, Data verifica.'},
+ {Voce:'VALORI ESITO RA',Indicazioni:RA_OUTCOMES.join(' | ')},
+ {Voce:'VALORI IVA VERIFICATA',Indicazioni:Object.values(IVA_LABELS).join(' | ')},
+ {Voce:'RITENUTA VERIFICATA',Indicazioni:RA_BANK.join(' | ')},
+ {Voce:'IMPORTO SAL',Indicazioni:'Inserire un numero reale soltanto se verificato; non usare simboli o formule. Lasciare vuoto quando non è noto.'},
+ {Voce:'NON MODIFICARE',Indicazioni:'ID pratica, Firma dati, RA originale, commessa, sede e colonne economiche.'},
+ {Voce:'REIMPORTAZIONE',Indicazioni:'Caricare il CSV Albert in SALCheck e poi il file Excel RA compilato. Le pratiche con dati Albert cambiati saranno scartate.'},
+ {Voce:'IMPATTO DATI',Indicazioni:'Gli esiti RA sono informativi: non modificano venduto, fatturato, incassato né SAL automatico.'},
+ {Voce:'RISERVATEZZA',Indicazioni:'Il master contiene i dati di tutti gli RA: per gli invii esterni preparare una copia con il solo foglio del RA destinatario e le istruzioni.'}
+ ];
+ const how=window.XLSX.utils.json_to_sheet(instructions);how['!cols']=[{wch:27},{wch:130}];
+ window.XLSX.utils.book_append_sheet(wb,how,'Istruzioni');
+ for(const g of groups)window.XLSX.utils.book_append_sheet(wb,g.sheet,g.sheetName);
+ err('');
+ window.XLSX.writeFile(wb,'SALCheck_Verifiche_RA_'+fileName.replace(/\.csv$/i,'').slice(0,40)+'.xlsx');
+ $('raImportStatus').textContent='Excel RA preparato: '+number(groups.length)+' Responsabili Area, '+number(candidates.length)+' pratiche, '+number(new Set(candidates.map(r=>r.siteKey)).size)+' sedi. Le assegnazioni RA mancanti o discordanti sono su fogli separati da verificare.';
+ $('raImportStatus').hidden=false;
+}
+async function importRaWorkbook(file){
+ if(!file)return;
+ if(!book){err('Prima carica il CSV Albert.');return}
+ if(!/\.xlsx$/i.test(file.name)||file.size>80*1024*1024){err('Seleziona un Excel .xlsx RA (massimo 80 MB).');return}
+ if(!window.XLSX){err('Il modulo Excel non è disponibile.');return}
+ try{
+  const wb=window.XLSX.read(await file.arrayBuffer(),{type:'array'});
+  const changes=new Map(),duplicate=new Set(),errors=[],stats={read:0,empty:0,skipped:0,sheets:0};
+  const warn=message=>{if(errors.length<6)errors.push(message)};
+  for(const name of wb.SheetNames){
+   const lines=window.XLSX.utils.sheet_to_json(wb.Sheets[name],{defval:'',raw:true});
+   if(!lines.length||!Object.prototype.hasOwnProperty.call(lines[0],'ID pratica')||
+      !Object.prototype.hasOwnProperty.call(lines[0],'Firma dati')||
+      !Object.prototype.hasOwnProperty.call(lines[0],'Esito RA'))continue;
+   stats.sheets++;
+   for(const v of lines){
+    stats.read++;
+    const status=String(v['Esito RA']??'').trim();
+    const iva=String(v['IVA verificata']??'').trim();
+    const bank=String(v['Ritenuta verificata']??'').trim();
+    const notes=String(v['Note RA']??'').trim().slice(0,1400);
+    const at=String(v['Data verifica']??'').trim().slice(0,80);
+    const salSource=v['SAL confermato €'];
+    const hasSal=salSource!==''&&salSource!==null&&salSource!==undefined;
+    if(!status&&!iva&&!bank&&!notes&&!at&&!hasSal){stats.empty++;continue}
+    let key;
+    try{key=decodeURIComponent(String(v['ID pratica']??''))}catch(e){stats.skipped++;warn(name+': identificativo non leggibile');continue}
+    const r=rowLookup.get(key);
+    if(!r){stats.skipped++;warn(name+': pratica non trovata');continue}
+    if(raSignature(r)!==String(v['Firma dati']??'')){stats.skipped++;warn(r.code+': importi Albert cambiati');continue}
+    if(r.ra!==String(v['RA originale']??'')){stats.skipped++;warn(r.code+': RA diverso dall’export attuale');continue}
+    if(changes.has(key)||duplicate.has(key)){changes.delete(key);duplicate.add(key);stats.skipped++;warn(r.code+': riga duplicata');continue}
+    if(status&&!RA_OUTCOMES.includes(status)){stats.skipped++;warn(r.code+': esito non ammesso');continue}
+    if(iva&&!Object.values(IVA_LABELS).includes(iva)){stats.skipped++;warn(r.code+': IVA non riconosciuta');continue}
+    if(bank&&!RA_BANK.includes(bank)){stats.skipped++;warn(r.code+': ritenuta non riconosciuta');continue}
+    const sal=hasSal?(typeof salSource==='number'?salSource:fx.n(salSource)):null;
+    if(hasSal&&(!Number.isFinite(sal)||sal<0||sal>100000000)){stats.skipped++;warn(r.code+': SAL confermato non valido');continue}
+    changes.set(key,{status,iva,bank,notes,at,sal});
+   }
+  }
+  if(!stats.sheets){err('Nessun foglio RA valido: importa un Excel creato dal pulsante “Esporta Excel verifiche RA”.');return}
+  for(const [id,item] of changes)raFeedback.set(id,item);
+  const all=[...raFeedback.values()],approved=all.filter(x=>x.status==='Da caricare');
+  const confirmed=approved.filter(x=>x.sal!==null);
+  const amount=confirmed.reduce((v,x)=>v+x.sal,0);
+  const open=all.filter(x=>x.status==='Da approfondire'||x.status==='Errore contabile').length;
+  $('raImportStatus').textContent='Verifiche RA importate: '+number(changes.size)+' pratiche, '+number(stats.empty)+' righe ancora vuote, '+number(stats.skipped)+' righe scartate. Totale in sessione: '+number(all.length)+' esiti. Da caricare: '+number(approved.length)+' pratiche; SAL confermato da RA '+euroC(fx.cent(amount))+' su '+number(confirmed.length)+' pratiche. Da approfondire: '+number(open)+'. I dati economici e i SAL automatici non cambiano.'+(errors.length?' Anomalie: '+errors.join(' · '):'');
+  $('raImportStatus').hidden=false;
+  err('');renderAll();
+ }catch(e){err('Impossibile leggere le verifiche RA: '+e.message)}
+}
+
 function downloadXlsx(){
  if(!window.XLSX){err('Il modulo Excel non è disponibile; puoi esportare il CSV filtrato.');return}
  err('');const wb=XLSX.utils.book_new();
@@ -473,4 +633,7 @@ $('detailTable').onchange=e=>{
  renderAll();
 };
 $('exportCSV').onclick=downloadCSV;$('exportExcel').onclick=downloadXlsx;
+$('exportRA').onclick=exportRaWorkbook;
+$('importRA').onclick=()=>$('raFile').click();
+$('raFile').onchange=e=>{importRaWorkbook(e.target.files?.[0]);e.target.value=''};
 })();
