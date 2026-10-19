@@ -86,3 +86,13 @@
 
 /* Bank withholding on tax-relief transfers: informational only; no change to invoice IVA */
 .withholding-marker{font-size:10px;font-weight:700;color:#246b87;line-height:1.25;white-space:normal;margin-top:4px}
+
+/* National RA verification workflow: deliberately distinct from automatic SAL KPIs */
+.ra-tools{margin:16px 0;padding:18px;background:#fff;border:1px solid #cddfec;border-radius:13px;display:flex;gap:20px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.ra-tools>div:first-child{flex:1 1 300px}
+.ra-tools h2{font-size:18px;margin:0 0 5px}
+.ra-tools p{margin:0}
+.ra-tools>.hint{flex:1 1 100%;font-size:11px;color:#57758b}
+.ra-buttons{display:flex;flex-wrap:wrap;gap:9px}
+.ra-feedback-indicator{display:inline-block;margin-top:4px;padding:2px 6px;background:#e8f3ed;color:#256043;font-size:10px;border:1px solid #cee4d3;border-radius:6px;font-weight:750}
+@media(max-width:700px){.ra-tools{padding:12px}.ra-buttons,.ra-buttons button{width:100%}}
