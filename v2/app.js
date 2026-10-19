@@ -54,8 +54,10 @@ function financialSummary(rows){
  const totals=fx.summary(rows),eligible=rows.filter(r=>!isExcluded(r)),summary=fx.summary(eligible);
  const excludedFull=rows.filter(r=>r.fullSal&&isExcluded(r)).length;
  const excludedPartial=rows.filter(r=>r.partial&&isExcluded(r)).length;
- const withholdingCount=rows.filter(r=>r.paid&&r.cashWithholding11).length;
- const withholdingTotal=rows.filter(r=>r.paid&&r.cashWithholding11).reduce((sum,r)=>sum+r.bankWithholding11,0);
+ const withholdingCount=rows.filter(r=>r.cashWithholdingRate>0).length;
+ const withholding8Count=rows.filter(r=>r.cashWithholdingRate===8).length;
+ const withholding11Count=rows.filter(r=>r.cashWithholdingRate===11).length;
+ const withholdingTotal=rows.filter(r=>r.cashWithholdingRate>0).reduce((sum,r)=>sum+r.bankWithholding,0);
  let pMin=0,pMax=0,partialCount=0,chosenCount=0,pendingCount=0,zeroCount=0;
  const minSal=fx.cent(book?.settings?.minSal??1);
  for(const r of eligible){
@@ -67,7 +69,7 @@ function financialSummary(rows){
  }
  return {...totals,fullCount:summary.fullCount,fullSal:summary.fullSal,
   partialCount,pMin,pMax,chosenCount,pendingCount,zeroCount,excludedFull,excludedPartial,
-  withholdingCount,withholdingTotal};
+  withholdingCount,withholding8Count,withholding11Count,withholdingTotal};
 }
 function reviewSignature(r){return [r.key,r.venduto,r.prodotto,r.fatturato,r.incassato].join('|')}
 function storedScenarios(){try{return JSON.parse(window.localStorage.getItem(SCENARIO_STORAGE_KEY)||'{}')||{}}catch(e){return {}}}
@@ -182,7 +184,7 @@ function renderAll(){
  const totals=financialSummary(activeRows);
  $('scopeDescription').textContent=scopedSites.size+' sedi con pratiche vendute · '+(network==='all'?'Dirette + franchising':network)+' · '+(selectedMacroarea?'Macroarea '+selectedMacroarea:'Tutte le macroaree')+' · '+(selectedYear?'Anno delibera '+selectedYear:'Tutti gli anni');
  $('kPrat').textContent=number(totals.practices);$('kSold').textContent='Venduto '+euroC(totals.venduto);
- $('kPaid').textContent=number(totals.paid);$('kPaidInfo').textContent=number(totals.invoice)+' fatturate integralmente'+(totals.withholdingCount?' · '+number(totals.withholdingCount)+' incassi compatibili con ritenuta 11%':'');
+ $('kPaid').textContent=number(totals.paid);$('kPaidInfo').textContent=number(totals.invoice)+' fatturate integralmente'+(totals.withholdingCount?' · '+number(totals.withholdingCount)+' incassi compatibili con ritenuta bancaria (8%: '+number(totals.withholding8Count)+', 11%: '+number(totals.withholding11Count)+')':'');
  $('kFull').textContent=euroC(totals.fullSal);$('kFullInfo').textContent=number(totals.fullCount)+' pratiche conteggiate'+(totals.excludedFull?' · '+number(totals.excludedFull)+' escluse/acconti':'')+' · netto revisioni';
  $('kPartial').textContent=totals.partialCount?(totals.pMin===totals.pMax?euroC(totals.pMin):euroC(totals.pMin)+' – '+euroC(totals.pMax)):'0,00 €';
  $('kPartialInfo').textContent=number(totals.partialCount)+' pratiche con SAL · '+number(totals.chosenCount)+(totals.chosenCount===1?' simulazione IVA impostata':' simulazioni IVA impostate')+' · '+number(totals.pendingCount)+' da simulare'+(totals.zeroCount?' · '+number(totals.zeroCount)+' SAL a zero':'')+(totals.excludedPartial?' · '+number(totals.excludedPartial)+' escluse/acconti':'');
@@ -267,9 +269,9 @@ function currentDetail(){
 }
 function moneyTd(c,strong){return '<td class="numeric '+(strong?'money-strong':'')+'">'+euroC(c)+'</td>'}
 function cashTd(r){
- if(!r.cashWithholding11)return moneyTd(r.incassato);
- return '<td class="numeric" title="Incasso compatibile con bonifico parlante: ritenuta bancaria 11% su imponibile convenzionale ottenuto scorporando il 22% dal bonifico lordo">'+
- euroC(r.incassato)+'<div class="withholding-marker">Ritenuta 11% compatibile: '+euroC(r.bankWithholding11)+'</div></td>';
+ if(!r.cashWithholdingRate)return moneyTd(r.incassato);
+ return '<td class="numeric" title="Incasso compatibile con bonifico parlante: ritenuta bancaria '+r.cashWithholdingRate+'% su base convenzionale ottenuta scorporando il 22% dal bonifico lordo. Verificare la data del bonifico">'+
+ euroC(r.incassato)+'<div class="withholding-marker">Ritenuta '+r.cashWithholdingRate+'% compatibile: '+euroC(r.bankWithholding)+'</div></td>';
 }
 function selectScenario(r){
  const chosen=selectedScenario(r);
@@ -335,9 +337,11 @@ function exportRows(rows){return rows.map(r=>{
  'Criterio imponibile':taxable?taxable.origin:'Non determinabile',
  'Incassato €':r.incassato/100,
  'Trattamento incasso':r.cashMethod||'Da riconciliare',
- 'Bonifico parlante ritenuta 11% compatibile':r.cashWithholding11?'Sì (da verificare)':'No',
- 'Ritenuta bancaria teorica 11% €':r.cashWithholding11?r.bankWithholding11/100:'',
- 'Incasso bancario atteso post ritenuta €':r.cashWithholding11?r.expectedCash11/100:'',
+ 'Bonifico parlante compatibile':r.cashWithholdingRate?'Sì (da verificare)':'No',
+ 'Ritenuta bonifico compatibile %':r.cashWithholdingRate||'',
+ 'Ritenuta bancaria teorica €':r.cashWithholdingRate?r.bankWithholding/100:'',
+ 'Incasso bancario atteso post ritenuta €':r.cashWithholdingRate?r.expectedCash/100:'',
+ 'Nota data bonifico':r.cashWithholdingRate?'Aliquota da confermare con data dell’accredito bancario, non con data delibera':'',
  'IVA fattura compatibile':ivaLabel(r.coefficient),'SAL venduto meno prodotto €':r.remaining/100,'SAL teorico min €':r.pMin/100,'SAL teorico max €':r.pMax/100,
  'Ipotesi IVA fattura':r.scenarios.map(x=>ivaLabel(x.fx)).join(' / '),'IVA fattura simulata':selectedScenario(r)?ivaLabel(selectedScenario(r).fx):'Da simulare',
  'SAL simulato €':selectedScenario(r)?selectedScenario(r).gap/100:'',
@@ -354,12 +358,12 @@ function exportRows(rows){return rows.map(r=>{
 function summaryTable(){
  const by=new Map();
  for(const r of activeRows){if(!by.has(r.siteKey))by.set(r.siteKey,[]);by.get(r.siteKey).push(r)}
- return [...by.entries()].map(([key,rs])=>{const s=financialSummary(rs),r=rs[0];return {'Sede':r.site,'Rete':r.network,'Filtro macroarea':selectedMacroarea||'Tutte le macroaree','Filtro anno':selectedYear||'Tutti gli anni','Pratiche vendute':s.practices,'Venduto €':s.venduto/100,'Prodotto €':s.prodotto/100,'Fatturato netto a pagare €':s.fatturato/100,'Incassato €':s.incassato/100,'Pratiche SAL completo':s.fullCount,'SAL fatture complete €':s.fullSal/100,'Incassi compatibili bonifico parlante 11%':s.withholdingCount,'Ritenuta banca teorica 11% €':s.withholdingTotal/100,'Pratiche SAL parziale':s.partialCount,'SAL parziale min €':s.pMin/100,'SAL parziale max €':s.pMax/100,'Regimi simulati':s.chosenCount,'Pratiche da simulare':s.pendingCount,'Escluse/acconti SAL completo':s.excludedFull,'Escluse/acconti SAL parziale':s.excludedPartial,'Anomalie codici ripetuti':s.possibleRepeats}}).sort((a,b)=>b['SAL fatture complete €']-a['SAL fatture complete €'])
+ return [...by.entries()].map(([key,rs])=>{const s=financialSummary(rs),r=rs[0];return {'Sede':r.site,'Rete':r.network,'Filtro macroarea':selectedMacroarea||'Tutte le macroaree','Filtro anno':selectedYear||'Tutti gli anni','Pratiche vendute':s.practices,'Venduto €':s.venduto/100,'Prodotto €':s.prodotto/100,'Fatturato netto a pagare €':s.fatturato/100,'Incassato €':s.incassato/100,'Pratiche SAL completo':s.fullCount,'SAL fatture complete €':s.fullSal/100,'Incassi compatibili bonifico parlante 8%':s.withholding8Count,'Incassi compatibili bonifico parlante 11%':s.withholding11Count,'Ritenuta banca teorica €':s.withholdingTotal/100,'Pratiche SAL parziale':s.partialCount,'SAL parziale min €':s.pMin/100,'SAL parziale max €':s.pMax/100,'Regimi simulati':s.chosenCount,'Pratiche da simulare':s.pendingCount,'Escluse/acconti SAL completo':s.excludedFull,'Escluse/acconti SAL parziale':s.excludedPartial,'Anomalie codici ripetuti':s.possibleRepeats}}).sort((a,b)=>b['SAL fatture complete €']-a['SAL fatture complete €'])
 }
 function summaryYears(){
  const by=new Map();
  for(const r of activeRows){const key=r.year||'Anno non disponibile';if(!by.has(key))by.set(key,[]);by.get(key).push(r)}
- return [...by.entries()].map(([year,rows])=>{const t=financialSummary(rows);return {'Anno delibera':year,'Filtro macroarea':selectedMacroarea||'Tutte le macroaree','Pratiche vendute':t.practices,'Venduto €':t.venduto/100,'Prodotto €':t.prodotto/100,'Fatturato netto a pagare €':t.fatturato/100,'Incassato €':t.incassato/100,'SAL su fatture complete €':t.fullSal/100,'Pratiche SAL fatture complete':t.fullCount,'Incassi compatibili bonifico parlante 11%':t.withholdingCount,'Ritenuta banca teorica 11% €':t.withholdingTotal/100,'SAL incassi parziali minimo €':t.pMin/100,'SAL incassi parziali massimo €':t.pMax/100,'Pratiche SAL incassi parziali':t.partialCount,'Regimi simulati':t.chosenCount,'Pratiche da simulare':t.pendingCount,'Escluse/acconti SAL completo':t.excludedFull,'Escluse/acconti SAL parziale':t.excludedPartial}})
+ return [...by.entries()].map(([year,rows])=>{const t=financialSummary(rows);return {'Anno delibera':year,'Filtro macroarea':selectedMacroarea||'Tutte le macroaree','Pratiche vendute':t.practices,'Venduto €':t.venduto/100,'Prodotto €':t.prodotto/100,'Fatturato netto a pagare €':t.fatturato/100,'Incassato €':t.incassato/100,'SAL su fatture complete €':t.fullSal/100,'Pratiche SAL fatture complete':t.fullCount,'Incassi compatibili bonifico parlante 8%':t.withholding8Count,'Incassi compatibili bonifico parlante 11%':t.withholding11Count,'Ritenuta banca teorica €':t.withholdingTotal/100,'SAL incassi parziali minimo €':t.pMin/100,'SAL incassi parziali massimo €':t.pMax/100,'Pratiche SAL incassi parziali':t.partialCount,'Regimi simulati':t.chosenCount,'Pratiche da simulare':t.pendingCount,'Escluse/acconti SAL completo':t.excludedFull,'Escluse/acconti SAL parziale':t.excludedPartial}})
  .sort((a,b)=>String(a['Anno delibera']).localeCompare(String(b['Anno delibera'])));
 }
 function csvSafe(value){let s=String(value??'');if(/^[\s]*[=+\-@]/.test(s))s="'"+s;return '"'+s.replace(/"/g,'""')+'"'}
