@@ -36,7 +36,17 @@
  </div>
  <div class="selected-chips" id="selectedChips" aria-live="polite"></div>
  <span class="hint" id="chosenHint">Cerca le sedi nel menu, spuntane più di una: il report ne mostrerà il totale combinato.</span>
-</div><div class="empty-state" id="emptyState"><div class="empty-icon">🏢</div><strong>Nessuna sede selezionata</strong><p>Apri il menu, cerca e seleziona una o più sedi, oppure premi “Tutte le sedi” per il consolidato.</p></div><div id="results" hidden>
+</div><div class="empty-state" id="emptyState"><div class="empty-icon">🏢</div><strong>Nessuna sede selezionata</strong><p>Apri il menu, cerca e seleziona una o più sedi, oppure premi “Tutte le sedi” per il consolidato.</p></div><div class="ra-tools" id="raTools">
+ <div><h2>Verifiche RA — Responsabile Area</h2><p id="raOwnersInfo" class="hint">Elenco RA letto dal CSV Albert.</p><p>Un unico Excel nazionale, con un foglio per ogni RA e tutte le sue sedi. I fogli includono le pratiche con SAL potenziale da verificare, non tutte le commesse vendute.</p></div>
+ <div class="ra-buttons">
+  <button id="exportRA" class="primary" type="button">Esporta Excel verifiche RA</button>
+  <button id="importRA" class="secondary" type="button">Importa verifiche RA</button>
+  <input type="file" id="raFile" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+ </div>
+ <p class="hint">I dati rimangono nel browser. Il file nazionale contiene dati di tutti gli RA: per inviare a ciascuno il suo foglio prepara una copia dedicata. I dati economici non vengono modificati dall'importazione.</p>
+</div>
+<div id="raImportStatus" class="alert info" role="status" aria-live="polite" hidden></div>
+<div id="results" hidden>
 <div class="section-head metrics-title"><div><p class="eyebrow">RISULTATI CONSOLIDATI</p><h2>Cruscotto economico</h2><p class="hint" id="scopeDescription"></p></div><button id="exportExcel" class="primary">Esporta report Excel</button></div>
 <p class="hint review-instructions">La selezione <b>“Acconto”</b> o <b>“Da escludere”</b> toglie immediatamente la pratica dai totali SAL, senza eliminarla dall’elenco. “Lavoro eseguito” rimane conteggiato. Nella scheda <b>SAL incassi parziali</b> puoi scegliere l’IVA fattura per ciascuna pratica e ottenere il SAL simulato; l’importo e la scelta restano salvati in questo browser per gli stessi dati economici.</p>
 <div class="metrics"><div class="metric"><span>Pratiche vendute</span><strong id="kPrat">—</strong><small id="kSold">—</small></div><div class="metric"><span>Fatturate e incassate</span><strong id="kPaid">—</strong><small id="kPaidInfo">—</small></div><div class="metric main-kpi"><span>SAL su fatture complete</span><strong id="kFull">—</strong><small id="kFullInfo">—</small></div><div class="metric"><span>SAL su incassi parziali / sconti</span><strong id="kPartial">—</strong><small id="kPartialInfo">—</small></div></div>
