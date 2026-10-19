@@ -5,6 +5,18 @@ const FX=[{v:1,label:"100%"},{v:1.06,label:"106%"},{v:1.10,label:"110%"},{v:1.18
 const n=x=>{if(typeof x==="number")return x;let s=String(x??"").trim().replace(/[€\s]/g,"");if(!s)return 0;if(s.includes(",")&&s.includes("."))s=s.lastIndexOf(",")>s.lastIndexOf(".")?s.replace(/\./g,"").replace(",","."):s.replace(/,/g,"");else if(s.includes(","))s=s.replace(/\./g,"").replace(",",".");return Number(s)};
 const cent=x=>Math.round((Number(x)+Number.EPSILON)*100);
 const close=(a,b,t)=>Math.abs(a-b)<=t;
+function beforeBankWithholdingCutoff(date){
+ const d=String(date??'').trim();
+ const iso=/^(20\d{2})[-/](\d{1,2})[-/](\d{1,2})/.exec(d);
+ const italian=/^(\d{1,2})[-/](\d{1,2})[-/](20\d{2})/.exec(d);
+ if(!iso&&!italian)return false;
+ const y=Number(iso?iso[1]:italian[3]);
+ const m=Number(iso?iso[2]:italian[2]);
+ const day=Number(iso?iso[3]:italian[1]);
+ // Deliberation date is NOT bank transfer date; this only rules out
+ // 8% for deliberations definitely subsequent to 1 March 2024.
+ return m>=1&&m<=12&&day>=1&&day<=31&&(y<2024||(y===2024&&m<3));
+}
 function yearFromDate(date){
  const d=String(date??"").trim();
  let m=/^(20\d{2})[-/]/.exec(d);if(m)return m[1];
@@ -12,7 +24,9 @@ function yearFromDate(date){
  return "";
 }
 function rowFromRaw(x){const value=k=>n(x[k]);return {
-  code:String(x.CodiceCommessa||"").trim(),year:yearFromDate(x.DataDelibera),site:String(x.Sede||"").trim(),network:String(x.CountryRete||"Non indicata").trim(),
+  code:String(x.CodiceCommessa||"").trim(),year:yearFromDate(x.DataDelibera),
+  oldDelibera:beforeBankWithholdingCutoff(x.DataDelibera),
+  site:String(x.Sede||"").trim(),network:String(x.CountryRete||"Non indicata").trim(),
   company:String(x.CodiceSocieta||"").trim(),area:String(x.macroarea||"").trim(),
   state:String(x.StatoPratica||"").trim(),address:String(x.Indirizzo||"").trim(),
   venduto:cent(value("Venduto€")),prodotto:cent(value("ProdottoLordo€")),
@@ -32,9 +46,10 @@ function store(){
   if(!r.venduto&&!r.prodotto&&!r.fatturato&&!r.incassato)return;
   const key=sk+"\u001f"+r.code;
   let group=map.get(key);
-  if(!group){group={key,siteKey:sk,code:r.code,year:r.year,yearConflict:false,site:r.site,network:r.network,company:r.company,area:r.area,address:r.address,state:r.state,
+  if(!group){group={key,siteKey:sk,code:r.code,year:r.year,yearConflict:false,site:r.site,network:r.network,company:r.company,area:r.area,address:r.address,state:r.state,oldDelibera:r.oldDelibera,
     sold:0,produced:0,invoiced:0,collected:0,lines:0,lineFinance:[],states:new Set(),sameFinance:false,signatures:new Set()};map.set(key,group)}
   group.sold+=r.venduto;group.produced+=r.prodotto;group.invoiced+=r.fatturato;group.collected+=r.incassato;group.lines++;
+  if(r.oldDelibera)group.oldDelibera=true;
   if(!group.year&&r.year)group.year=r.year;else if(group.year&&r.year&&group.year!==r.year)group.yearConflict=true;
   group.states.add(r.state);if(!group.address&&r.address)group.address=r.address;
   if(!group.company&&r.company)group.company=r.company;
@@ -66,11 +81,17 @@ function store(){
    // Questo test identifica compatibilità economica, non prova il tipo di bonifico.
    const normalCashOk=g.invoiced>0&&close(g.invoiced,g.collected,cashTol);
    const withholdingBase=g.invoiced>0?cent((g.invoiced/100)/1.22):0;
-   const withholding11=cent((withholdingBase/100)*.11);
-   const expectedCash11=g.invoiced-withholding11;
-   const cashWithholding11=!normalCashOk&&g.invoiced>0&&g.collected>0&&withholding11>0&&close(expectedCash11,g.collected,cashTol);
-   const cashOk=normalCashOk||cashWithholding11;
-   const cashMethod=normalCashOk?'Incasso ordinario':cashWithholding11?'Compatibile bonifico parlante 11%':'Da riconciliare';
+   const withholdingCandidates=[11,...(g.oldDelibera?[8]:[])].map(rate=>{
+    const retained=cent((withholdingBase/100)*(rate/100));
+    return {rate,retained,expected:g.invoiced-retained};
+   }).filter(x=>!normalCashOk&&g.invoiced>0&&g.collected>0&&x.retained>0&&close(x.expected,g.collected,cashTol));
+   // If two different rates happen to match tiny amounts, don't guess which tax applies.
+   const bankMatch=withholdingCandidates.length===1?withholdingCandidates[0]:null;
+   const cashWithholdingRate=bankMatch?.rate||0;
+   const bankWithholding=bankMatch?.retained||0;
+   const expectedCash=bankMatch?.expected??null;
+   const cashOk=normalCashOk||!!bankMatch;
+   const cashMethod=normalCashOk?'Incasso ordinario':bankMatch?'Compatibile bonifico parlante '+bankMatch.rate+'%':'Da riconciliare';
    const paid=full&&cashOk;
    const remaining=g.sold-g.produced;
    const fullSal=paid&&remaining>min;
@@ -84,8 +105,8 @@ function store(){
     key:g.key,siteKey:g.siteKey,code:g.code,year:g.year,yearConflict:g.yearConflict,site:g.site,network:g.network,company:g.company,area:g.area,
     address:g.address,state:[...g.states].filter(Boolean).join(", "),venduto:g.sold,prodotto:g.produced,fatturato:g.invoiced,incassato:g.collected,
     lines:g.lines,duplicate:g.lines>1,sameFinance:g.sameFinance,coefficient,invoiceBase,
-    full,paid,cashOk,cashMethod,cashWithholding11,bankWithholding11:cashWithholding11?withholding11:0,
-    expectedCash11:cashWithholding11?expectedCash11:null,remaining,fullSal,partial,scenarios,pMin,pMax,
+    full,paid,cashOk,cashMethod,cashWithholdingRate,bankWithholding,expectedCash,
+    remaining,fullSal,partial,scenarios,pMin,pMax,
     kind
    })
   }
