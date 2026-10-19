@@ -306,7 +306,7 @@ function renderDetails(){
  const validSortKeys=tab==='partial-sal'?['venduto','prodotto','fatturato','incassato','taxBase','simSal']:['venduto','prodotto','fatturato','incassato','taxBase','remaining'];
  if(detailSort.key&&!validSortKeys.includes(detailSort.key))detailSort={key:'',dir:'asc'};
  currentRows=currentDetail();const pages=Math.max(1,Math.ceil(currentRows.length/PAGE));page=Math.max(0,Math.min(page,pages-1));
- $('detailCount').textContent=number(currentRows.length)+' commesse'+(bankRate?' · Ritenuta '+(bankRate==='none'?'non riconosciuta':bankRate+'%'):'')+(currentRows.some(isExcluded)?' · '+number(currentRows.filter(isExcluded).length)+' escluse/acconti, ancora visibili':'');$('pageInfo').textContent=(page+1)+' / '+pages;$('prev').disabled=page===0;$('next').disabled=page>=pages-1;
+ $('detailCount').textContent=number(currentRows.length)+(currentRows.length===1?' commessa':' commesse')+(bankRate?' · Ritenuta '+(bankRate==='none'?'non riconosciuta':bankRate+'%'):'')+(currentRows.some(isExcluded)?' · '+number(currentRows.filter(isExcluded).length)+' escluse/acconti, ancora visibili':'');$('pageInfo').textContent=(page+1)+' / '+pages;$('prev').disabled=page===0;$('next').disabled=page>=pages-1;
  const headers=[
   {label:'Commessa'},{label:'Anno delibera'},{label:'Sede'},{label:'Rete'},{label:'Stato (info)'},
   {label:'Venduto',key:'venduto'},{label:'Prodotto',key:'prodotto'},
@@ -436,7 +436,7 @@ document.addEventListener('click',e=>{
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('sitePickerPanel').hidden){setPickerOpen(false);$('sitePickerToggle').focus()}});
 
 $('recalculate').onclick=recalculating;
-$('siteTable').onclick=e=>{const tr=e.target.closest('tr[data-focus]');if(!tr)return;focus=tr.dataset.focus;tab='full-sal';page=0;term='';coefficient='';$('search').value='';$('coef').value='';renderSites();renderTabs();renderDetails();$('tabs').scrollIntoView({behavior:'smooth',block:'start'})};
+$('siteTable').onclick=e=>{const tr=e.target.closest('tr[data-focus]');if(!tr)return;focus=tr.dataset.focus;tab='full-sal';page=0;term='';coefficient='';bankRate='';$('search').value='';$('coef').value='';$('bankRateFilter').value='';renderSites();renderTabs();renderDetails();$('tabs').scrollIntoView({behavior:'smooth',block:'start'})};
 $('siteHead').onclick=e=>{
  const b=e.target.closest('button[data-site-sort]');if(!b)return;
  const key=b.dataset.siteSort;
