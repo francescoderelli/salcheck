@@ -5,7 +5,7 @@ const $=id=>document.getElementById(id), fx=window.SALCore;
 const euroC=v=>new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR'}).format(v/100);
 const number=v=>new Intl.NumberFormat('it-IT').format(v);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let book=null,scope='choose',network='all',selectedSites=new Set(),selectedMacroarea='',selectedYear='',siteSearchTerm='',focus='',tab='full-sal',term='',coefficient='',bankRate='',page=0,fileName='',review=new Map(),scenarioChoices=new Map(),activeRows=[],currentRows=[],rowLookup=new Map(),detailSort={key:'',dir:'asc'},siteSort={key:'',dir:'asc'};
+let book=null,scope='choose',network='all',selectedSites=new Set(),selectedMacroarea='',selectedYear='',siteSearchTerm='',focus='',tab='full-sal',term='',coefficient='',bankRate='',page=0,fileName='',review=new Map(),scenarioChoices=new Map(),raFeedback=new Map(),activeRows=[],currentRows=[],rowLookup=new Map(),detailSort={key:'',dir:'asc'},siteSort={key:'',dir:'asc'};
 const PAGE=40;
 const IVA_LABELS={
   '100%':'Reverse charge / split payment',
@@ -130,7 +130,7 @@ function parse(file){
    try{
     const result=base.finalize(settings());
     if(!result.rows.length)throw Error('Non ho trovato pratiche con venduto positivo nel file.');
-    book={...result,sourceStore:base};rowLookup=new Map(result.rows.map(r=>[r.key,r]));fileName=file.name;restoreReviews(result.rows);restoreScenarios(result.rows);network='all';scope='choose';selectedSites.clear();selectedMacroarea='';selectedYear='';siteSearchTerm='';focus='';tab='full-sal';term='';coefficient='';bankRate='';page=0;
+    book={...result,sourceStore:base};rowLookup=new Map(result.rows.map(r=>[r.key,r]));fileName=file.name;restoreReviews(result.rows);restoreScenarios(result.rows);raFeedback=new Map();$('raImportStatus').hidden=true;network='all';scope='choose';selectedSites.clear();selectedMacroarea='';selectedYear='';siteSearchTerm='';focus='';tab='full-sal';term='';coefficient='';bankRate='';page=0;
     $('networkFilter').value='all';$('siteSearchInput').value='';$('search').value='';$('coef').value='';$('bankRateFilter').value='';
     renderMacroareas();
     setPickerOpen(false);
@@ -322,7 +322,7 @@ function renderDetails(){
    '"><button type="button" class="sort-head '+(selected?'is-sorted':'')+'" data-detail-sort="'+esc(x.key)+'" title="Ordina '+esc(x.label)+' per importo">'+esc(x.label)+' <span class="sort-indicator" aria-hidden="true">'+arrow+'</span></button></th>';
  }).join('')+'</tr>';
  $('detailTable').innerHTML=currentRows.slice(page*PAGE,(page+1)*PAGE).map(r=>{
-  let h='<tr class="'+(isExcluded(r)?'review-excluded':'')+'"><td><strong>'+esc(r.code)+'</strong><div class="original">'+esc(r.address).slice(0,70)+'</div></td><td>'+esc(r.year||'—')+'</td><td>'+esc(r.site)+'</td><td>'+esc(r.network==='IT-Franchising'?'Franchising':'Diretta')+'</td><td>'+esc(r.state)+'</td>';
+  let h='<tr class="'+(isExcluded(r)?'review-excluded':'')+'"><td><strong>'+esc(r.code)+'</strong><div class="original">'+esc(r.address).slice(0,70)+'</div>'+(raFeedback.has(r.key)?'<div class="ra-feedback-indicator">RA: '+esc(raFeedback.get(r.key).status||'Verifica ricevuta')+'</div>':'')+'</td><td>'+esc(r.year||'—')+'</td><td>'+esc(r.site)+'</td><td>'+esc(r.network==='IT-Franchising'?'Franchising':'Diretta')+'</td><td>'+esc(r.state)+'</td>';
   h+=moneyTd(r.venduto)+moneyTd(r.prodotto)+moneyTd(r.fatturato)+cashTd(r);
   if(tab==='partial-sal'){
     const result=simulatedRange(r);
@@ -342,7 +342,8 @@ function recalculating(){
 function showScope(mode){scope=mode;focus='';page=0;renderAll()}
 function exportRows(rows){return rows.map(r=>{
  const taxable=taxableBase(r);
- const data={'Commessa':r.code,'Anno delibera':r.year,'Sede':r.site,'Rete':r.network,'Società':r.company,'Macroarea':areaName(r.area),'Stato (informativo)':r.state,'Indirizzo':r.address,
+ const feedback=raFeedback.get(r.key);
+ const data={'Commessa':r.code,'Responsabile Area (RA)':r.ra,'Anno delibera':r.year,'Sede':r.site,'Rete':r.network,'Società':r.company,'Macroarea':areaName(r.area),'Stato (informativo)':r.state,'Indirizzo':r.address,
  'Venduto €':r.venduto/100,'Prodotto €':r.prodotto/100,'Fatturato netto a pagare €':r.fatturato/100,
  'Imponibile fattura calcolato €':taxable&&taxable.min===taxable.max?taxable.min/100:'',
  'Imponibile fattura minimo €':taxable?taxable.min/100:'',
@@ -355,6 +356,10 @@ function exportRows(rows){return rows.map(r=>{
  'Ritenuta bancaria teorica €':r.cashWithholdingRate?r.bankWithholding/100:'',
  'Incasso bancario atteso post ritenuta €':r.cashWithholdingRate?r.expectedCash/100:'',
  'Nota data bonifico':r.cashWithholdingRate?'Aliquota da confermare con data dell’accredito bancario, non con data delibera':'',
+ 'Esito verifica RA':feedback?.status||'','IVA verificata RA':feedback?.iva||'',
+ 'Ritenuta verificata RA':feedback?.bank||'',
+ 'SAL confermato RA €':feedback?.sal??'',
+ 'Note verifica RA':feedback?.notes||'','Data verifica RA':feedback?.at||'',
  'IVA fattura compatibile':ivaLabel(r.coefficient),'SAL venduto meno prodotto €':r.remaining/100,'SAL teorico min €':r.pMin/100,'SAL teorico max €':r.pMax/100,
  'Ipotesi IVA fattura':r.scenarios.map(x=>ivaLabel(x.fx)).join(' / '),'IVA fattura simulata':selectedScenario(r)?ivaLabel(selectedScenario(r).fx):'Da simulare',
  'SAL simulato €':selectedScenario(r)?selectedScenario(r).gap/100:'',
