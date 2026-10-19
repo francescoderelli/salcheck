@@ -7,18 +7,15 @@ const cent=x=>Math.round((Number(x)+Number.EPSILON)*100);
 const close=(a,b,t)=>Math.abs(a-b)<=t;
 function beforeBankWithholdingCutoff(date){
  const d=String(date??'').trim();
- let m=/^(20\d{2})[-/](\d{1,2})[-/](\d{1,2})/.exec(d);
- if(!m)m=/^(\d{1,2})[-/](\d{1,2})[-/](20\d{2})/.exec(d)?.slice(0).reverse().slice(0,3);
- if(!m)return false;
- // ISO dates common in Albert. The date is delibera, not bonifico:
- // use it only to rule out the 8% if the deliberation came after the legal cutoff.
- const v=d.match(/^(20\d{2})[-/](\d{1,2})[-/](\d{1,2})/)||
-           d.match(/^(\d{1,2})[-/](\d{1,2})[-/](20\d{2})/);
- const year=d.match(/^20\d{2}/)?Number(v[1]):Number(v[3]);
- const month=d.match(/^20\d{2}/)?Number(v[2]):Number(v[2]);
- const day=d.match(/^20\d{2}/)?Number(v[3]):Number(v[1]);
- return Number.isFinite(year)&&month>=1&&month<=12&&day>=1&&day<=31&&
-  (year<2024||(year===2024&&(month<3)));
+ const iso=/^(20\d{2})[-/](\d{1,2})[-/](\d{1,2})/.exec(d);
+ const italian=/^(\d{1,2})[-/](\d{1,2})[-/](20\d{2})/.exec(d);
+ if(!iso&&!italian)return false;
+ const y=Number(iso?iso[1]:italian[3]);
+ const m=Number(iso?iso[2]:italian[2]);
+ const day=Number(iso?iso[3]:italian[1]);
+ // Deliberation date is NOT bank transfer date; this only rules out
+ // 8% for deliberations definitely subsequent to 1 March 2024.
+ return m>=1&&m<=12&&day>=1&&day<=31&&(y<2024||(y===2024&&m<3));
 }
 function yearFromDate(date){
  const d=String(date??"").trim();
