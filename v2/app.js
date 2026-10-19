@@ -130,7 +130,13 @@ function parse(file){
    try{
     const result=base.finalize(settings());
     if(!result.rows.length)throw Error('Non ho trovato pratiche con venduto positivo nel file.');
-    book={...result,sourceStore:base};rowLookup=new Map(result.rows.map(r=>[r.key,r]));fileName=file.name;restoreReviews(result.rows);restoreScenarios(result.rows);raFeedback=new Map();$('raImportStatus').hidden=true;network='all';scope='choose';selectedSites.clear();selectedMacroarea='';selectedYear='';siteSearchTerm='';focus='';tab='full-sal';term='';coefficient='';bankRate='';page=0;
+    book={...result,sourceStore:base};rowLookup=new Map(result.rows.map(r=>[r.key,r]));fileName=file.name;restoreReviews(result.rows);restoreScenarios(result.rows);raFeedback=new Map();$('raImportStatus').hidden=true;
+    const raNames=[...new Set(result.rows.map(r=>r.ra))];
+    const unassigned=result.rows.filter(r=>r.ra==='RA non indicato'||r.ra==='RA da verificare').length;
+    $('raOwnersInfo').textContent=result.stats.raColumnPresent?
+     number(raNames.length)+' RA/assegnazioni nel CSV · '+number(unassigned)+' pratiche con RA assente o discordante':
+     'Colonna Responsabile Area non presente nel CSV: controlla l’export Albert.';
+    network='all';scope='choose';selectedSites.clear();selectedMacroarea='';selectedYear='';siteSearchTerm='';focus='';tab='full-sal';term='';coefficient='';bankRate='';page=0;
     $('networkFilter').value='all';$('siteSearchInput').value='';$('search').value='';$('coef').value='';$('bankRateFilter').value='';
     renderMacroareas();
     setPickerOpen(false);
