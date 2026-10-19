@@ -24,8 +24,9 @@ function yearFromDate(date){
  return "";
 }
 function getRa(raw){
- const k=Object.keys(raw).find(key=>key.toLowerCase().replace(/[^a-z0-9]/g,'')==='responsabilearea');
- return k?String(raw[k]??'').trim().replace(/\s+/g,' '):'';
+ const keys=Object.keys(raw).filter(key=>key.toLowerCase().replace(/[^a-z0-9]/g,'')==='responsabilearea');
+ const found=keys.map(k=>String(raw[k]??'').trim()).find(Boolean)||'';
+ return found.replace(/\s+/g,' ');
 }
 function rowFromRaw(x){const value=k=>n(x[k]);return {
   code:String(x.CodiceCommessa||"").trim(),year:yearFromDate(x.DataDelibera),
