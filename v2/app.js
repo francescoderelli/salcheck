@@ -5,7 +5,7 @@ const $=id=>document.getElementById(id), fx=window.SALCore;
 const euroC=v=>new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR'}).format(v/100);
 const number=v=>new Intl.NumberFormat('it-IT').format(v);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let book=null,scope='choose',network='all',selectedSites=new Set(),selectedMacroarea='',selectedYear='',siteSearchTerm='',focus='',tab='full-sal',term='',coefficient='',page=0,fileName='',review=new Map(),scenarioChoices=new Map(),activeRows=[],currentRows=[],rowLookup=new Map(),detailSort={key:'',dir:'asc'},siteSort={key:'',dir:'asc'};
+let book=null,scope='choose',network='all',selectedSites=new Set(),selectedMacroarea='',selectedYear='',siteSearchTerm='',focus='',tab='full-sal',term='',coefficient='',bankRate='',page=0,fileName='',review=new Map(),scenarioChoices=new Map(),activeRows=[],currentRows=[],rowLookup=new Map(),detailSort={key:'',dir:'asc'},siteSort={key:'',dir:'asc'};
 const PAGE=40;
 const IVA_LABELS={
   '100%':'Reverse charge / split payment',
@@ -130,8 +130,8 @@ function parse(file){
    try{
     const result=base.finalize(settings());
     if(!result.rows.length)throw Error('Non ho trovato pratiche con venduto positivo nel file.');
-    book={...result,sourceStore:base};rowLookup=new Map(result.rows.map(r=>[r.key,r]));fileName=file.name;restoreReviews(result.rows);restoreScenarios(result.rows);network='all';scope='choose';selectedSites.clear();selectedMacroarea='';selectedYear='';siteSearchTerm='';focus='';tab='full-sal';term='';coefficient='';page=0;
-    $('networkFilter').value='all';$('siteSearchInput').value='';$('search').value='';$('coef').value='';
+    book={...result,sourceStore:base};rowLookup=new Map(result.rows.map(r=>[r.key,r]));fileName=file.name;restoreReviews(result.rows);restoreScenarios(result.rows);network='all';scope='choose';selectedSites.clear();selectedMacroarea='';selectedYear='';siteSearchTerm='';focus='';tab='full-sal';term='';coefficient='';bankRate='';page=0;
+    $('networkFilter').value='all';$('siteSearchInput').value='';$('search').value='';$('coef').value='';$('bankRateFilter').value='';
     renderMacroareas();
     setPickerOpen(false);
     renderYears();
@@ -254,9 +254,22 @@ function renderTabs(){
   el.innerHTML=esc(TAB_LABELS[category])+'<span class="tabcount">'+number(stats[category])+(removed?' · '+number(removed)+' escluse/acconti':'')+'</span>';
  });
 }
+function matchesIvaFilter(r){
+ if(!coefficient)return true;
+ const chosen=selectedScenario(r);
+ // When a regime is selected in the partial-SAL tab, also honor it in "Tutte".
+ if(chosen)return chosen.fx===coefficient;
+ if(r.coefficient&&r.coefficient.split(' + ').includes(coefficient))return true;
+ return r.partial&&r.scenarios.some(x=>x.fx===coefficient);
+}
+function matchesBankFilter(r){
+ if(!bankRate)return true;
+ const rate=Number(r.cashWithholdingRate)||0;
+ return bankRate==='none'?rate===0:rate===Number(bankRate);
+}
 function currentDetail(){
  return activeRows.filter(r=>(!focus||r.siteKey===focus)&&matchTab(r)
-  &&(!coefficient||(tab==='partial-sal'?(selectedScenario(r)?selectedScenario(r).fx===coefficient:r.scenarios.some(x=>x.fx===coefficient)):r.coefficient.split(' + ').includes(coefficient)))
+  &&matchesIvaFilter(r)&&matchesBankFilter(r)
   &&(!term||[r.code,r.site,r.address,r.state].some(x=>String(x).toLowerCase().includes(term))))
   .sort((a,b)=>{
    if(detailSort.key){
@@ -293,7 +306,7 @@ function renderDetails(){
  const validSortKeys=tab==='partial-sal'?['venduto','prodotto','fatturato','incassato','taxBase','simSal']:['venduto','prodotto','fatturato','incassato','taxBase','remaining'];
  if(detailSort.key&&!validSortKeys.includes(detailSort.key))detailSort={key:'',dir:'asc'};
  currentRows=currentDetail();const pages=Math.max(1,Math.ceil(currentRows.length/PAGE));page=Math.max(0,Math.min(page,pages-1));
- $('detailCount').textContent=number(currentRows.length)+' commesse'+(currentRows.some(isExcluded)?' · '+number(currentRows.filter(isExcluded).length)+' escluse/acconti, ancora visibili':'');$('pageInfo').textContent=(page+1)+' / '+pages;$('prev').disabled=page===0;$('next').disabled=page>=pages-1;
+ $('detailCount').textContent=number(currentRows.length)+' commesse'+(bankRate?' · Ritenuta '+(bankRate==='none'?'non riconosciuta':bankRate+'%'):'')+(currentRows.some(isExcluded)?' · '+number(currentRows.filter(isExcluded).length)+' escluse/acconti, ancora visibili':'');$('pageInfo').textContent=(page+1)+' / '+pages;$('prev').disabled=page===0;$('next').disabled=page>=pages-1;
  const headers=[
   {label:'Commessa'},{label:'Anno delibera'},{label:'Sede'},{label:'Rete'},{label:'Stato (info)'},
   {label:'Venduto',key:'venduto'},{label:'Prodotto',key:'prodotto'},
@@ -375,7 +388,10 @@ function downloadCSV(){
 function downloadXlsx(){
  if(!window.XLSX){err('Il modulo Excel non è disponibile; puoi esportare il CSV filtrato.');return}
  err('');const wb=XLSX.utils.book_new();
+ // The first sheet reflects the visible detail tab and its IVA / withholding filters.
+ // Existing category and audit sheets keep the full selected site/year/macroarea perimeter.
  const tabs=[
+  ['Dettaglio filtrato',exportRows(currentRows)],
   ['Riepilogo sedi',summaryTable()],
   ['Riepilogo anni',summaryYears()],
   ['SAL fatture complete',exportRows(activeRows.filter(x=>x.fullSal))],
@@ -437,6 +453,7 @@ $('clearFocus').onclick=()=>{focus='';renderSites();renderDetails()};
 $('tabs').onclick=e=>{const b=e.target.closest('button[data-tab]');if(!b)return;tab=b.dataset.tab;page=0;renderTabs();renderDetails()};
 $('search').oninput=e=>{term=e.target.value.toLowerCase();page=0;renderDetails()};
 $('coef').onchange=e=>{coefficient=e.target.value;page=0;renderDetails()};
+$('bankRateFilter').onchange=e=>{bankRate=e.target.value;page=0;renderDetails()};
 $('prev').onclick=()=>{page=Math.max(0,page-1);renderDetails()};
 $('next').onclick=()=>{page++;renderDetails()};
 $('detailTable').onchange=e=>{
