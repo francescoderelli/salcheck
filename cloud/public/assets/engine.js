@@ -64,6 +64,14 @@ function store(){
   if(group.signatures.has(sig)&&(r.venduto||r.prodotto||r.fatturato||r.incassato))group.sameFinance=true;
   group.signatures.add(sig);group.lineFinance.push([r.venduto,r.fatturato,r.prodotto,r.incassato]);
  }
+ function addGroup(r){
+  const lines=r.financeLines||[[r.venduto,r.fatturato,r.prodotto,r.incassato]],count=r.lines||lines.length,sk=r.network+"\u001f"+r.site;
+  allRows+=count;rowsWithSale+=count;hasRaColumn=true;if(Object.prototype.hasOwnProperty.call(r,'area'))hasMacroareaColumn=true;
+  const area=r.area||'Non indicata';macroareaCounts.set(area,(macroareaCounts.get(area)||0)+count);
+  const site=siteList.get(sk)||{key:sk,code:r.site,network:r.network,area:new Set(),company:new Set(),raw:0,withSale:0};
+  site.raw+=count;site.withSale+=count;if(r.area)site.area.add(r.area);if(r.company)site.company.add(r.company);siteList.set(sk,site);
+  map.set(r.key,{key:r.key,siteKey:sk,code:r.code,year:r.year||'',yearConflict:r.yearConflict===true,site:r.site,network:r.network,company:r.company||'',area:r.area||'',address:r.address||'',oldDelibera:r.oldDelibera===true,raNames:new Map([[r.ra.toLowerCase(),r.ra]]),sold:r.venduto,produced:r.prodotto,invoiced:r.fatturato,collected:r.incassato,lines:count,lineFinance:lines,states:new Set([r.state||'']),sameFinance:r.sameFinance===true,signatures:new Set()});
+ }
  function finalize({invoiceTolerance=1,cashTolerance=.02,minSal=1}={}){
   const invoiceTol=cent(invoiceTolerance),cashTol=cent(cashTolerance),min=cent(minSal);const rows=[];
   for(const g of map.values()){
@@ -109,7 +117,7 @@ function store(){
    const pMin=scenarios.length?Math.min(...scenarios.map(x=>x.gap)):0,pMax=scenarios.length?Math.max(...scenarios.map(x=>x.gap)):0;
    const kind=fullSal?"full-sal":partial?"partial-sal":paid?"fully-paid":full?"invoiced-unpaid":"other";
    rows.push({
-    key:g.key,siteKey:g.siteKey,code:g.code,
+    key:g.key,siteKey:g.siteKey,code:g.code,financeLines:g.lineFinance,oldDelibera:g.oldDelibera,
     ra:g.raNames.size===1?[...g.raNames.values()][0]:g.raNames.size>1?'RA da verificare':'RA non indicato',
     raConflict:g.raNames.size>1,
     year:g.year,yearConflict:g.yearConflict,site:g.site,network:g.network,company:g.company,area:g.area,
@@ -122,7 +130,7 @@ function store(){
   }
   return {rows,sites:[...siteList.values()].map(x=>({...x,area:[...x.area],company:[...x.company]})),stats:{allRows,invalid,rowsWithSale,groups:rows.length,raColumnPresent:hasRaColumn,macroareaColumnPresent:hasMacroareaColumn,macroareas:[...macroareaCounts].map(([name,count])=>({name,count})).sort((a,b)=>b.count-a.count||a.name.localeCompare(b.name))},settings:{invoiceTolerance,cashTolerance,minSal}}
  }
- return {add,finalize}
+ return {add,addGroup,finalize}
 }
 function summary(rows){
  const total={practices:rows.length,venduto:0,prodotto:0,fatturato:0,incassato:0,fullCount:0,fullSal:0,partialCount:0,pMin:0,pMax:0,paid:0,invoice:0,unpaid:0,unmatched:0,multiRows:0,possibleRepeats:0};
@@ -139,4 +147,3 @@ function summary(rows){
 }
 root.SALCore={FX,cent,n,store,summary};
 })(typeof window!=="undefined"?window:globalThis);
-

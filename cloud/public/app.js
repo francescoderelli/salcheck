@@ -3,9 +3,9 @@ const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"']/g,
 const euro=n=>n===null||n===undefined?'—':new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR'}).format(n/100),date=s=>s?new Date(s).toLocaleString('it-IT'):'—';
 const label=s=>s==='EDAC_BS'?'Brescia 1':s==='EDAC_BS2'?'Brescia 2':s;
 const outcomes=['Da verificare','SAL da caricare','Già registrato','Lavoro non eseguito','Acconto','Da approfondire','Da escludere'];
-let token='',data,managerMode=false,busy=false,casePage=0,historyOffset=0,historyMore=false,service;
+let token='',data,managerMode=false,busy=false,casePage=0,historyOffset=0,historyMore=false,service,reportRevision=null;
 function message(s){$('message').textContent=s}
-function clear(){token='';data=null;$('workspace').hidden=true;$('entry').hidden=false;$('logout').hidden=true;$('identity').textContent='Responsabili Area';$('cases').replaceChildren();$('followups').replaceChildren();$('history').replaceChildren();}
+function clear(){token='';data=null;reportRevision=null;document.body.classList.remove('signed-in');$('v2Report').contentWindow.SALReport?.clear();document.querySelectorAll('[data-view]').forEach(x=>{x.setAttribute('aria-pressed',String(x.dataset.view==='reportView'));$(x.dataset.view).hidden=x.dataset.view!=='reportView'});$('workspace').hidden=true;$('entry').hidden=false;$('logout').hidden=true;$('identity').textContent='Responsabili Area';$('cases').replaceChildren();$('followups').replaceChildren();$('history').replaceChildren();}
 async function run(fn){if(busy)return;busy=true;$('workspace').inert=true;$('entry').inert=true;try{await fn()}catch(e){message(e.message||'Operazione non riuscita.')}finally{busy=false;$('workspace').inert=false;$('entry').inert=false}}
 async function request(route,body,authorized=true){
  const response=await fetch(service+route,{method:body===undefined?'GET':'POST',headers:{...(authorized?{Authorization:'Bearer '+token}:{}),...(body===undefined?{}:{'Content-Type':'application/json'})},credentials:'same-origin',redirect:'error',body:body===undefined?undefined:JSON.stringify(body)});
@@ -30,13 +30,23 @@ async function renderHistory(){
  $('historyPage').textContent='Pagina '+(historyOffset/100+1);$('historyPrevious').disabled=!historyOffset;$('historyNext').disabled=!historyMore;
  $('history').innerHTML=h.entries.map(x=>{const d=x.event==='comparison'?x.data.declaration:x.data,p=d.promise;return `<tr><td>${esc(date(x.at))}</td><td>${esc({declaration:'Dichiarazione salvata',comparison:'Nuovo CSV',archive:'Impegno chiuso'}[x.event])}${x.source?'<br>'+esc(x.source):''}</td><td>${esc(x.actorEmail||d.ra)}</td><td>${esc(label(d.site)+' · '+d.code)}</td><td>${esc(x.event==='comparison'?x.data.status:d.status)}</td><td class="num">${euro(p?.expected)}</td><td class="num">${euro(x.event==='comparison'?x.data.delta:p?.closure?.delta)}</td><td class="notes">${esc(d.notes)}</td></tr>`}).join('')||'<tr><td colspan="8" class="empty">Lo storico verrà compilato con i primi salvataggi.</td></tr>';
 }
+window.addEventListener('message',e=>{const frame=$('v2Report');if(e.origin===location.origin&&e.source===frame.contentWindow&&e.data?.type==='sal-report-height'&&Number.isFinite(e.data.height))frame.style.height=Math.max(650,Math.min(50000,e.data.height+10))+'px'});
+async function loadReport(){
+ const frame=$('v2Report');if(!frame.contentWindow.SALReport)await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Il report V2 non si è aperto. Ricarica la pagina.')),15000);frame.addEventListener('load',()=>{clearTimeout(timer);resolve()},{once:true})});
+ const report=frame.contentWindow.SALReport;if(!report)throw Error('Report V2 non disponibile.');
+ if(reportRevision===data.revision){report.updateDeclarations(data.declarations||[]);return}
+ report.clear();$('reportLoading').hidden=false;let cursor='',rows=[];
+ do{const result=await request('/api/report?revision='+encodeURIComponent(data.revision)+'&cursor='+encodeURIComponent(cursor));rows.push(...result.rows);cursor=result.next;$('reportLoading').textContent='Caricamento report V2: '+rows.length+' pratiche…'}while(cursor);
+ report.mount({rows,declarations:data.declarations||[],source:data.source,user:data.user,onDownload:(bytes,name,type)=>{const blob=new Blob([bytes],{type}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),30000)},onSave:async input=>{await request('/api/declarations',input);await refresh();message('Dichiarazione salvata nello storico condiviso.')}});
+ reportRevision=data.revision;$('reportLoading').hidden=true;
+}
 async function refresh(){
- data=await request('/api/overview');$('entry').hidden=true;$('logout').hidden=false;$('workspace').hidden=false;$('identity').textContent=data.user.email+(data.user.role==='manager'?' · Gestione CSV':'');$('managerPanel').hidden=data.user.role!=='manager';
+ data=await request('/api/overview?summary=1');document.body.classList.add('signed-in');$('entry').hidden=true;$('logout').hidden=false;$('workspace').hidden=false;$('identity').textContent=data.user.email+(data.user.role==='manager'?' · Gestione CSV':'');$('managerPanel').hidden=data.user.role!=='manager';
  const sites=data.sites.map(label);$('mySites').textContent=data.user.role==='manager'?'Tutte le sedi pubblicate':sites.length?sites.join(' · '):'Nessuna sede disponibile per la tua email';
  $('source').textContent=data.source?'Aggiornamento: '+date(data.source.publishedAt)+(data.user.role==='manager'?' · '+data.source.source:''):'Nessun CSV ancora pubblicato.';
- renderCases();renderFollowups();await renderHistory();
+ renderCases();renderFollowups();await renderHistory();await loadReport();
 }
-$('entry').onsubmit=e=>{e.preventDefault();run(async()=>{const s=await request('/api/session',{email:$('email').value},false);token=s.token;casePage=historyOffset=0;await refresh();message(data.cases.length?'Dichiarazioni salvate nell’archivio condiviso.':'Nessuna pratica pubblicata per questa email. Controlla l’indirizzo o attendi il CSV del responsabile.');})};
+$('entry').onsubmit=e=>{e.preventDefault();run(async()=>{const s=await request('/api/session',{email:$('email').value},false);token=s.token;casePage=historyOffset=0;await refresh();message(data.sites.length?'Report V2 aggiornato sulle sedi associate alla tua email.':'Nessuna pratica pubblicata per questa email. Controlla l’indirizzo o attendi il CSV del responsabile.');})};
 $('logout').onclick=()=>run(async()=>{try{await request('/api/logout',{})}finally{clear();message('Sessione chiusa. Lo storico resta salvato.')}});
 $('refresh').onclick=()=>run(async()=>{await refresh();message('Dati aggiornati dall’archivio condiviso.')});
 $('search').oninput=()=>{casePage=0;renderCases()};
@@ -64,7 +74,7 @@ async function publish(file){
  const result=source.finalize();if(result.stats.invalid||!result.rows.length)throw Error('CSV incompleto o con righe non valide. Nessun aggiornamento pubblicato.');
  if(!confirm('Pubblicare '+result.rows.length+' pratiche da '+file.name+'? Le dichiarazioni e i confronti precedenti resteranno nello storico.')){$('importStatus').textContent='Pubblicazione annullata.';return;}
  const job=await request('/api/imports',{source:file.name,count:result.rows.length,baseRevision:data.revision});
- const fields=['key','network','site','code','ra','year','venduto','prodotto','fatturato','incassato','fullSal','partial','pMin','pMax'];
+ const fields=['key','network','site','code','ra','year','venduto','prodotto','fatturato','incassato','fullSal','partial','pMin','pMax','financeLines','oldDelibera','area','company','state','address','lines','sameFinance','yearConflict'];
  for(let i=0;i<result.rows.length;i+=500){const rows=result.rows.slice(i,i+500).map(r=>Object.fromEntries(fields.map(k=>[k,r[k]])));await request('/api/imports/'+job.id+'/rows',{rows});$('importStatus').textContent='Preparazione '+Math.min(i+500,result.rows.length)+' / '+result.rows.length+' pratiche…';}
  await request('/api/imports/'+job.id+'/commit',{});historyOffset=0;await refresh();$('importStatus').textContent='CSV pubblicato. Riscontri aggiunti allo storico.';message('Nuovo CSV confrontato con le dichiarazioni precedenti.');await backupAfterImport();
 }

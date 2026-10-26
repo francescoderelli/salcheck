@@ -35,7 +35,8 @@ export async function handle(request,env,identity){
   if(user.role==='manager'){await owner();if(user.owner_id!==identity.userId)fail(403,'Sessione gestione non valida.')}
   if(path==='/api/logout'&&method==='POST'){await store.q('DELETE FROM sessions WHERE hash=?',user.hash).run();return json({ok:true})}
   if(method==='GET'){
-   if(path==='/api/overview')return json(await store.overview(user));
+   if(path==='/api/overview')return json(await store.overview(user,url.searchParams.get('summary')==='1'));
+   if(path==='/api/report')return json(await store.report(user,{cursor:url.searchParams.get('cursor')||'',revision:url.searchParams.get('revision')||''}));
    if(path==='/api/history'){const offset=Number(url.searchParams.get('offset')||0);if(!Number.isSafeInteger(offset)||offset<0||offset>1000000)fail(400,'Pagina non valida.');return json(await store.history(user,offset))}
    if(path==='/api/backup'){
     store.manager(user);const iterator=store.backup(user),encoder=new TextEncoder();
