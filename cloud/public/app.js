@@ -17,7 +17,7 @@ function renderCases(){
  const rows=filteredCases(),pages=Math.max(1,Math.ceil(rows.length/50));casePage=Math.min(casePage,pages-1);
  $('caseCount').textContent=rows.length+' pratiche';$('casePage').textContent=(casePage+1)+' / '+pages;$('casePrevious').disabled=casePage===0;$('caseNext').disabled=casePage+1>=pages;
  $('cases').innerHTML=rows.slice(casePage*50,(casePage+1)*50).map(r=>{const d=r.declaration,p=d?.promise&&!d.promise.closedAt?d.promise:null,key=encodeURIComponent(r.key),amount=p?.expected??(r.fullSal?r.remaining:null);
- return `<tr data-key="${esc(key)}"><td><b>${esc(label(r.site))}</b><br>${esc(r.code)}</td><td class="num">${euro(r.prodotto)}</td><td class="num">${r.fullSal?euro(r.remaining):r.partial?euro(r.pMin)+' – '+euro(r.pMax):'—'}</td><td><select aria-label="Dichiarazione ${esc(r.code)}">${outcomes.map(s=>`<option${s===(d?.status||'Da verificare')?' selected':''}>${esc(s)}</option>`).join('')}</select></td><td><input type="number" min="0.01" step="0.01" max="10000000000" aria-label="SAL da caricare ${esc(r.code)}" value="${amount===null?'':amount/100}"${p?' disabled':''}></td><td><textarea rows="1" maxlength="1400" aria-label="Note ${esc(r.code)}">${esc(d?.notes||'')}</textarea></td><td><button data-save="${esc(key)}">Salva</button></td></tr>`;
+ return `<tr data-key="${esc(key)}"><td><b>${esc(label(r.site))}</b><br>${esc(r.code)}</td><td class="num">${euro(r.prodotto)}</td><td class="num">${r.fullSal?euro(r.remaining):r.partial?euro(r.pMin)+' – '+euro(r.pMax):'—'}</td><td><select aria-label="Dichiarazione ${esc(r.code)}">${outcomes.map(s=>`<option${s===(d?.status||'Da verificare')?' selected':''}>${esc(s)}</option>`).join('')}</select></td><td><span>${euro(amount)}</span></td><td><textarea rows="1" maxlength="1400" aria-label="Note ${esc(r.code)}">${esc(d?.notes||'')}</textarea></td><td><button data-save="${esc(key)}">Salva</button></td></tr>`;
  }).join('')||'<tr><td colspan="7" class="empty">Nessuna pratica da mostrare per questa email.</td></tr>';
 }
 function renderFollowups(){
@@ -34,11 +34,11 @@ window.addEventListener('message',e=>{const frame=$('v2Report');if(e.origin===lo
 async function loadReport(){
  const frame=$('v2Report');if(!frame.contentWindow.SALReport)await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Il report V2 non si è aperto. Ricarica la pagina.')),15000);frame.addEventListener('load',()=>{clearTimeout(timer);resolve()},{once:true})});
  const report=frame.contentWindow.SALReport;if(!report)throw Error('Report V2 non disponibile.');
- if(reportRevision===data.revision){report.updateDeclarations(data.declarations||[]);return}
+ if(reportRevision===(data.reportRevision||data.revision)){report.updateDeclarations(data.declarations||[]);return}
  report.clear();$('reportLoading').hidden=false;let cursor='',rows=[];
- do{const result=await request('/api/report?revision='+encodeURIComponent(data.revision)+'&cursor='+encodeURIComponent(cursor));rows.push(...result.rows);cursor=result.next;$('reportLoading').textContent='Caricamento report V2: '+rows.length+' pratiche…'}while(cursor);
+ do{const result=await request('/api/report?revision='+encodeURIComponent(data.revision)+'&reportRevision='+encodeURIComponent(data.reportRevision||data.revision)+'&cursor='+encodeURIComponent(cursor));rows.push(...result.rows);cursor=result.next;$('reportLoading').textContent='Caricamento report V2: '+rows.length+' pratiche…'}while(cursor);
  report.mount({rows,declarations:data.declarations||[],source:data.source,user:data.user,onDownload:(bytes,name,type)=>{const blob=new Blob([bytes],{type}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),30000)},onSave:async input=>{await request('/api/declarations',input);await refresh();message('Dichiarazione salvata nello storico condiviso.')}});
- reportRevision=data.revision;$('reportLoading').hidden=true;
+ reportRevision=data.reportRevision||data.revision;$('reportLoading').hidden=true;
 }
 async function refresh(){
  data=await request('/api/overview?summary=1');document.body.classList.add('signed-in');$('entry').hidden=true;$('logout').hidden=false;$('workspace').hidden=false;$('identity').textContent=data.user.email+(data.user.role==='manager'?' · Gestione CSV':'');$('managerPanel').hidden=data.user.role!=='manager';
@@ -54,15 +54,16 @@ $('casePrevious').onclick=()=>{casePage--;renderCases()};$('caseNext').onclick=(
 $('historyPrevious').onclick=()=>run(async()=>{historyOffset=Math.max(0,historyOffset-100);await renderHistory()});$('historyNext').onclick=()=>run(async()=>{if(historyMore){historyOffset+=100;await renderHistory()}});
 document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-view]').forEach(x=>{x.setAttribute('aria-pressed',String(x===b));$(x.dataset.view).hidden=x!==b})});
 $('cases').onclick=e=>{const button=e.target.closest('[data-save]');if(!button)return;run(async()=>{
- const key=decodeURIComponent(button.dataset.save),r=data.cases.find(x=>x.key===key),tr=button.closest('tr'),raw=tr.querySelector('input').value,status=tr.querySelector('select').value;
- if(status==='SAL da caricare'&&raw==='')throw Error('Indica il SAL che ti impegni a caricare prima di salvare.');
- await request('/api/declarations',{key,status,expected:raw===''?null:Math.round(Number(raw)*100),notes:tr.querySelector('textarea').value,version:r.declaration?.version||0});await refresh();message('Dichiarazione salvata con data, autore e punto di partenza.');
+ const key=decodeURIComponent(button.dataset.save),r=data.cases.find(x=>x.key===key),tr=button.closest('tr'),status=tr.querySelector('select').value;
+ await request('/api/declarations',{key,status,expected:null,notes:tr.querySelector('textarea').value,version:r.declaration?.version||0});await refresh();message('Dichiarazione salvata con data, autore e punto di partenza.');
  })};
 $('followups').onclick=e=>{const b=e.target.closest('[data-archive]');if(!b)return;const key=decodeURIComponent(b.dataset.archive),d=data.followups.find(x=>x.declaration.key===key).declaration;
  if(!confirm('Chiudere questo impegno? Dichiarazioni e confronti restano nello storico. Un nuovo impegno partirà dal CSV corrente.'))return;
  run(async()=>{await request('/api/archive',{key,version:d.version});await refresh();message('Impegno chiuso e conservato nello storico.')});};
 $('csv').onchange=e=>{const file=e.target.files?.[0];e.target.value='';if(file)run(()=>publish(file))};
-async function publish(file){
+$('completeMetadata').onclick=()=>$('metadataCsv').click();
+$('metadataCsv').onchange=e=>{const file=e.target.files?.[0];e.target.value='';if(file)run(()=>publish(file,true))};
+async function publish(file,metadataOnly=false){
  if(!/\.csv$/i.test(file.name)||file.size>300*1024*1024)throw Error('Scegli un CSV Albert fino a 300 MB.');
  const source=SALCore.store();$('importStatus').textContent='Lettura del CSV…';
  const prefix=new Uint8Array(await file.slice(0,3).arrayBuffer()),payload=prefix[0]===239&&prefix[1]===187&&prefix[2]===191?file.slice(3):file;
@@ -72,11 +73,11 @@ async function publish(file){
   result.data.forEach(r=>source.add(r));$('importStatus').textContent='Lette '+sourceCount(result)+' righe nel blocco corrente…';
  },complete(){if(!failed)resolve()},error:reject});});
  const result=source.finalize();if(result.stats.invalid||!result.rows.length)throw Error('CSV incompleto o con righe non valide. Nessun aggiornamento pubblicato.');
- if(!confirm('Pubblicare '+result.rows.length+' pratiche da '+file.name+'? Le dichiarazioni e i confronti precedenti resteranno nello storico.')){$('importStatus').textContent='Pubblicazione annullata.';return;}
+ if(!confirm(metadataOnly?'Recuperare indirizzi e dettagli da '+file.name+'? Procederò solo se tutte le pratiche e gli importi coincidono con il CSV online. Dichiarazioni e storico restano invariati.':'Pubblicare '+result.rows.length+' pratiche da '+file.name+'? Le dichiarazioni e i confronti precedenti resteranno nello storico.')){$('importStatus').textContent='Pubblicazione annullata.';return;}
  const job=await request('/api/imports',{source:file.name,count:result.rows.length,baseRevision:data.revision});
  const fields=['key','network','site','code','ra','year','venduto','prodotto','fatturato','incassato','fullSal','partial','pMin','pMax','financeLines','oldDelibera','area','company','state','address','lines','sameFinance','yearConflict'];
  for(let i=0;i<result.rows.length;i+=500){const rows=result.rows.slice(i,i+500).map(r=>Object.fromEntries(fields.map(k=>[k,r[k]])));await request('/api/imports/'+job.id+'/rows',{rows});$('importStatus').textContent='Preparazione '+Math.min(i+500,result.rows.length)+' / '+result.rows.length+' pratiche…';}
- await request('/api/imports/'+job.id+'/commit',{});historyOffset=0;await refresh();$('importStatus').textContent='CSV pubblicato. Riscontri aggiunti allo storico.';message('Nuovo CSV confrontato con le dichiarazioni precedenti.');await backupAfterImport();
+ await request('/api/imports/'+job.id+(metadataOnly?'/metadata':'/commit'),{});reportRevision=null;historyOffset=0;await refresh();$('importStatus').textContent=metadataOnly?'Indirizzi e dettagli recuperati. Importi, dichiarazioni e confronti invariati.':'CSV pubblicato. Riscontri aggiunti allo storico.';message(metadataOnly?'Indirizzi recuperati dal CSV originale.':'Nuovo CSV confrontato con le dichiarazioni precedenti.');await backupAfterImport();
 }
 function sourceCount(result){return result.data.length}
 let backupFolder=null;
@@ -86,7 +87,7 @@ async function restoreFolder(){try{backupFolder=await folderPreference();if(back
 function backupName(){return 'SALCheck-storico-'+new Date().toISOString().replace(/[:.]/g,'-')+'.jsonl'}
 async function backupResponse(){const r=await fetch(service+'/api/backup',{headers:{Authorization:'Bearer '+token},credentials:'same-origin',redirect:'error'});if(!r.ok){let e;try{e=await r.json()}catch{}throw Error(e?.error||'Copia non disponibile.')}return r}
 async function saveFolderBackup(ask){if(!backupFolder)throw Error('Prima collega una cartella OneDrive su questo computer.');let permission=await backupFolder.queryPermission({mode:'readwrite'});if(permission!=='granted'&&ask)permission=await backupFolder.requestPermission({mode:'readwrite'});if(permission!=='granted')throw Error('Premi Salva copia per autorizzare la scrittura nella cartella.');backupMessage('Salvataggio copia in corso…');const name=backupName(),file=await backupFolder.getFileHandle(name,{create:true}),writer=await file.createWritable();try{const r=await backupResponse();await r.body.pipeTo(writer);backupMessage('Copia salvata in '+backupFolder.name+': '+name+'. La sincronizzazione online è gestita da OneDrive.')}catch(e){try{await writer.abort()}catch{}try{await backupFolder.removeEntry(name)}catch{}throw e}}
-async function backupAfterImport(){try{await saveFolderBackup(false)}catch(e){backupMessage('CSV pubblicato. Copia OneDrive ancora da salvare: '+e.message)}}
+async function backupAfterImport(){try{await saveFolderBackup(false)}catch(e){backupMessage('Archivio aggiornato. Copia OneDrive ancora da salvare: '+e.message)}}
 $('linkFolder').onclick=async()=>{if(!window.showDirectoryPicker){backupMessage('Apri il sito in Chrome o Edge per scegliere una cartella. Puoi anche usare Scarica copia.');return}try{backupFolder=await showDirectoryPicker({id:'salcheck-backup',mode:'readwrite'});await folderPreference(backupFolder);backupMessage('Cartella collegata: '+backupFolder.name+'. Premi Salva copia per la prima copia.')}catch(e){if(e.name!=='AbortError')backupMessage('Cartella non collegata: '+e.message)}};
 $('saveBackup').onclick=()=>run(async()=>{try{await saveFolderBackup(true)}catch(e){backupMessage('Copia non salvata: '+e.message);throw e}});
 $('downloadBackup').onclick=()=>run(async()=>{backupMessage('Preparazione copia…');const r=await backupResponse(),blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=backupName();a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);backupMessage('Download avviato. Sposta il file nella cartella OneDrive per conservarlo online.');});

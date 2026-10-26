@@ -243,12 +243,12 @@ function selectScenario(r){
 }
 let cloudDeclarations=new Map(),drafts=new Map(),cloudSave=null,cloudDownload=null;
 function draftFor(r){
- if(!drafts.has(r.key)){const d=cloudDeclarations.get(r.key),p=d?.promise&&!d.promise.closedAt?d.promise:null;drafts.set(r.key,{status:d?.status||'Da verificare',expected:p?.expected??(r.fullSal?r.remaining:null),notes:d?.notes||'',version:d?.version||0})}
+ if(!drafts.has(r.key)){const d=cloudDeclarations.get(r.key),p=d?.promise&&!d.promise.closedAt?d.promise:null;drafts.set(r.key,{status:d?.status||'Da verificare',notes:d?.notes||'',version:d?.version||0})}
  return drafts.get(r.key);
 }
 function selectReview(r){
  const d=draftFor(r),saved=cloudDeclarations.get(r.key),locked=saved?.promise&&!saved.promise.closedAt;
- return '<div class="cloud-review"><select class="review" aria-label="Verifica '+esc(r.code)+'" data-review="'+encodeURIComponent(r.key)+'">'+REVIEW_OPTIONS.map(x=>'<option '+(d.status===x?'selected':'')+'>'+esc(x)+'</option>').join('')+'</select><label>SAL da caricare (€)<input data-amount="'+encodeURIComponent(r.key)+'" aria-label="SAL da caricare '+esc(r.code)+'" type="number" min="0.01" step="0.01" value="'+(d.expected===null?'':d.expected/100)+'" '+(locked?'disabled':'')+'></label><textarea data-note="'+encodeURIComponent(r.key)+'" aria-label="Note '+esc(r.code)+'" rows="1" maxlength="1400" placeholder="Note RA">'+esc(d.notes)+'</textarea><button type="button" class="primary tiny" data-cloud-save="'+encodeURIComponent(r.key)+'">Salva</button>'+(saved?'<span class="hint">Salvato il '+esc(new Date(saved.updatedAt).toLocaleString('it-IT'))+'</span>':'')+'</div>';
+ return '<div class="cloud-review"><select class="review" aria-label="Verifica '+esc(r.code)+'" data-review="'+encodeURIComponent(r.key)+'">'+REVIEW_OPTIONS.map(x=>'<option '+(d.status===x?'selected':'')+'>'+esc(x)+'</option>').join('')+'</select><textarea data-note="'+encodeURIComponent(r.key)+'" aria-label="Note '+esc(r.code)+'" rows="1" maxlength="1400" placeholder="Note RA">'+esc(d.notes)+'</textarea><button type="button" class="primary tiny" data-cloud-save="'+encodeURIComponent(r.key)+'">Salva</button>'+(saved?'<span class="hint">Salvato il '+esc(new Date(saved.updatedAt).toLocaleString('it-IT'))+'</span>':'')+'</div>';
 }
 function renderDetails(){
  $('focusTag').hidden=!focus;$('clearFocus').hidden=!focus;
@@ -276,7 +276,7 @@ function renderDetails(){
    '"><button type="button" class="sort-head '+(selected?'is-sorted':'')+'" data-detail-sort="'+esc(x.key)+'" title="Ordina '+esc(x.label)+' per importo">'+esc(x.label)+' <span class="sort-indicator" aria-hidden="true">'+arrow+'</span></button></th>';
  }).join('')+'</tr>';
  $('detailTable').innerHTML=currentRows.slice(page*PAGE,(page+1)*PAGE).map(r=>{
-  let h='<tr class="'+(isExcluded(r)?'review-excluded':'')+'"><td><strong>'+esc(r.code)+'</strong><div class="original" data-site-address>'+esc(r.address||'Indirizzo non disponibile nel CSV pubblicato')+'</div>'+(raFeedback.has(r.key)?'<div class="ra-feedback-indicator">RA: '+esc(raFeedback.get(r.key).status||'Verifica ricevuta')+'</div>':'')+'</td><td>'+esc(r.year||'—')+'</td><td>'+esc(r.site)+'</td><td>'+esc(r.network==='IT-Franchising'?'Franchising':'Diretta')+'</td><td>'+esc(r.state)+'</td>';
+  let h='<tr class="'+(isExcluded(r)?'review-excluded':'')+'"><td><strong>'+esc(r.code)+'</strong><div class="original" data-site-address>'+esc(r.address||(r.financeLines?'—':'Indirizzo da recuperare dall’importazione'))+'</div>'+(raFeedback.has(r.key)?'<div class="ra-feedback-indicator">RA: '+esc(raFeedback.get(r.key).status||'Verifica ricevuta')+'</div>':'')+'</td><td>'+esc(r.year||'—')+'</td><td>'+esc(r.site)+'</td><td>'+esc(r.network==='IT-Franchising'?'Franchising':'Diretta')+'</td><td>'+esc(r.state)+'</td>';
   h+=moneyTd(r.venduto)+moneyTd(r.prodotto)+moneyTd(r.fatturato)+cashTd(r);
   if(tab==='partial-sal'){
     const result=simulatedRange(r);
@@ -417,16 +417,17 @@ $('detailTable').onchange=e=>{
  draftFor(r).status=t.value;review.set(r.key,t.value);renderAll();
 };
 $('detailTable').oninput=e=>{
- const t=e.target.closest('[data-amount],[data-note]');if(!t)return;
- const key=decodeURIComponent(t.dataset.amount||t.dataset.note),r=rowLookup.get(key);if(!r)return;
- const d=draftFor(r);if(t.dataset.amount)d.expected=t.value===''?null:Math.round(Number(t.value)*100);else d.notes=t.value;
+ const t=e.target.closest('[data-note]');if(!t)return;
+ const key=decodeURIComponent(t.dataset.note),r=rowLookup.get(key);if(!r)return;
+ draftFor(r).notes=t.value;
 };
 $('detailTable').onclick=async e=>{
  const b=e.target.closest('[data-cloud-save]');if(!b)return;
  const key=decodeURIComponent(b.dataset.cloudSave),r=rowLookup.get(key),draft={...draftFor(r)};
- if(draft.status==='SAL da caricare'&&(!Number.isSafeInteger(draft.expected)||draft.expected<=0)){err('Indica il SAL da caricare prima di salvare.');return}
+ const promise=cloudDeclarations.get(key)?.promise,iva=selectedScenario(r)?.fx||'';
+ if(draft.status==='SAL da caricare'&&(!promise||promise.closedAt)&&r.partial&&r.pMin!==r.pMax&&!iva){err('Apri SAL incassi parziali e scegli l’IVA fattura: l’importo viene calcolato dal report.');return}
  b.disabled=true;err('');
- try{await cloudSave({key,...draft});drafts.delete(key);renderAll();err('');}
+ try{await cloudSave({key,...draft,iva});drafts.delete(key);renderAll();err('');}
  catch(e){err(e.message||'Salvataggio non riuscito. Le modifiche non sono confermate.');b.disabled=false}
 };
 $('exportCSV').onclick=()=>{try{downloadCSV()}catch(e){err('Esportazione CSV non riuscita: '+e.message)}};$('exportExcel').onclick=()=>{try{downloadXlsx()}catch(e){err('Esportazione Excel non riuscita: '+e.message)}};
@@ -444,7 +445,7 @@ window.SALReport={
   $('networkFilter').value='all';$('siteSearchInput').value='';$('search').value='';$('coef').value='';$('bankRateFilter').value='';
   const allButton=document.querySelector('[data-scope="all"]');allButton.textContent=user.role==='manager'?'Tutte le sedi':'Tutte le mie sedi';
   const missing=rows.some(r=>!r.financeLines);
-  $('reportNotice').hidden=!missing;$('reportNotice').textContent='Questo CSV è stato caricato con la vista precedente: macroarea, stato e dettagli delle righe non erano conservati. Il responsabile può reimportare lo stesso CSV una volta per completare il report V2; dichiarazioni e storico rimangono.';
+  $('reportNotice').hidden=!missing;$('reportNotice').textContent='La precedente importazione non ha conservato indirizzi e dettagli V2. Il responsabile può recuperarli dal CSV già caricato, senza cambiare importi, dichiarazioni o storico.';
   renderMacroareas();renderYears();renderFileScope();setPickerOpen(false);renderAll();$('dashboard').hidden=false;
   $('inputInfo').textContent=number(rows.length)+' pratiche · '+number(book.sites.length)+' sedi';
   $('fileScopeNote').textContent='Perimetro delle sole sedi autorizzate per questo accesso · '+number(rows.length)+' pratiche. Gli importi sono quelli del CSV pubblicato.';

@@ -5,7 +5,7 @@ Applicazione con archivio online Cloudflare D1, distribuita tramite Sites. Il co
 ## Uso
 
 1. Il responsabile apre `/gestione`, accede con il proprio account ChatGPT autorizzato e importa il CSV Albert. I RA non importano file.
-2. Dopo l’accesso si apre il report V2 originale: perimetro, filtri, cinque indicatori economici, classifica sedi, categorie delle pratiche, IVA/ritenute e report Excel/CSV. Un RA inserisce la propria email aziendale: il servizio filtra le pratiche usando ResponsabileArea nel CSV. Nella colonna **Verifica** seleziona **SAL da caricare**, indica importo e note, poi **Salva**. I pulsanti **Controllo settimanale** e **Storico** mostrano impegni e riscontri condivisi.
+2. Dopo l’accesso si apre il report V2 originale: perimetro, filtri, quattro indicatori economici, classifica sedi, categorie delle pratiche, IVA/ritenute e report Excel/CSV. Un RA inserisce la propria email aziendale: il servizio filtra le pratiche usando ResponsabileArea nel CSV. Nella colonna **Verifica** seleziona **SAL da caricare**, aggiunge eventuali note, poi **Salva**. Il campo importo modificabile è stato rimosso: il servizio ricava il SAL dal report. Per un SAL parziale con più ipotesi occorre scegliere l’IVA nel report, senza digitare importi. I pulsanti **Controllo settimanale** e **Storico** mostrano impegni e riscontri condivisi.
 3. Il responsabile importa il CSV della settimana successiva. Il sistema confronta l'aumento del ProdottoLordo con il primo importo dichiarato, aggiungendo un riscontro allo storico.
 4. **Chiudi impegno** congela l'esito. Un eventuale nuovo impegno parte dal CSV corrente; tutti gli eventi precedenti restano nello storico.
 
@@ -17,7 +17,7 @@ La variabile nativa Sites `SALCHECK_OWNER_EMAIL` identifica l'account proprietar
 
 ## Storico e copie OneDrive
 
-D1 conserva dichiarazioni, versioni, confronti e metadati delle importazioni. Il nuovo CSV conserva anche macroarea, stato, indirizzo e righe economiche aggregate necessarie al motore V2. Gli import precedenti non avevano tali dettagli: occorre reimportare il CSV una volta, mantenendo dichiarazioni e storico. Il report segnala questi import incompleti; le categorie dedotte da soli totali possono differire per fatture con IVA mista fino al reimport. Il nuovo CSV sostituisce i dati operativi correnti, conservando tutti i confronti e gli eventi delle dichiarazioni. I vecchi blocchi di caricamento completi vengono rimossi dopo la pubblicazione per contenere le dimensioni; il CSV originale resta sul computer del responsabile.
+D1 conserva dichiarazioni, versioni, confronti e metadati delle importazioni. Il nuovo CSV conserva anche macroarea, stato, indirizzo e righe economiche aggregate necessarie al motore V2. Gli import precedenti non conservavano tali dettagli. Il comando Gestione → Recupera indirizzi e dettagli dal CSV già caricato completa i soli metadati: procede soltanto se chiavi, assegnazioni RA e valori economici di tutte le pratiche coincidono. Non crea nuovi confronti settimanali e non cambia dichiarazioni, importi o revisione del CSV. Una revisione separata dei metadati fa ricaricare il report agli altri utenti al successivo Aggiorna. Il nuovo CSV sostituisce i dati operativi correnti, conservando tutti i confronti e gli eventi delle dichiarazioni. I vecchi blocchi di caricamento completi vengono rimossi dopo la pubblicazione per contenere le dimensioni; il CSV originale resta sul computer del responsabile.
 
 **Collega cartella OneDrive** usa il selettore del browser per una cartella locale sincronizzata. Il browser deve supportare File System Access (Chrome/Edge). L'autorizzazione può dover essere ripetuta. Dopo ogni importazione pubblicata, se cartella e permessi sono disponibili, viene salvata una copia NDJSON con data e ora. **Salva copia nella cartella** include anche dichiarazioni arrivate dopo l'ultima importazione. **Scarica copia** è l'alternativa manuale.
 
@@ -35,3 +35,4 @@ Gli importi sono in centesimi. Il prodotto iniziale e il SAL atteso non cambiano
 - Schema in `db/schema.ts`, migrazioni generate con Drizzle in `drizzle/`. Mai creare tabelle durante una richiesta.
 - Build e pubblicazione tramite gli helper ufficiali Sites. Conservare `.openai/hosting.json` per aggiornare lo stesso progetto.
 - Per la prova locale, `.dev.vars` (ignorato) può contenere `SALCHECK_OWNER_EMAIL="seedy@sites.test"`, identità fittizia del mock Sites. Migrazioni applicate solo all'archivio locale.
+

@@ -36,7 +36,7 @@ export async function handle(request,env,identity){
   if(path==='/api/logout'&&method==='POST'){await store.q('DELETE FROM sessions WHERE hash=?',user.hash).run();return json({ok:true})}
   if(method==='GET'){
    if(path==='/api/overview')return json(await store.overview(user,url.searchParams.get('summary')==='1'));
-   if(path==='/api/report')return json(await store.report(user,{cursor:url.searchParams.get('cursor')||'',revision:url.searchParams.get('revision')||''}));
+   if(path==='/api/report')return json(await store.report(user,{cursor:url.searchParams.get('cursor')||'',revision:url.searchParams.get('revision')||'',reportRevision:url.searchParams.get('reportRevision')||undefined}));
    if(path==='/api/history'){const offset=Number(url.searchParams.get('offset')||0);if(!Number.isSafeInteger(offset)||offset<0||offset>1000000)fail(400,'Pagina non valida.');return json(await store.history(user,offset))}
    if(path==='/api/backup'){
     store.manager(user);const iterator=store.backup(user),encoder=new TextEncoder();
@@ -46,8 +46,8 @@ export async function handle(request,env,identity){
   }
   if(method==='POST'){
    if(path==='/api/imports')return json(await store.startImport(user,body),201);
-   const match=/^\/api\/imports\/([a-f0-9-]{36})\/(rows|commit)$/.exec(path);
-   if(match)return json(match[2]==='rows'?await store.stage(user,match[1],body.rows):await store.commit(user,match[1]));
+   const match=/^\/api\/imports\/([a-f0-9-]{36})\/(rows|commit|metadata)$/.exec(path);
+   if(match)return json(match[2]==='rows'?await store.stage(user,match[1],body.rows):match[2]==='metadata'?await store.completeMetadata(user,match[1]):await store.commit(user,match[1]));
    if(path==='/api/declarations')return json(await store.declare(user,body));
    if(path==='/api/archive')return json(await store.archive(user,body.key,body.version));
   }
