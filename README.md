@@ -1,5 +1,9 @@
 # SALCheck — controllo SAL per sede
 
+## Accesso per email e storico settimanale
+
+La nuova implementazione è descritta in [v5/README.md](v5/README.md): il RA dichiara la propria email, vede le sedi associate al CSV e salva il SAL da caricare; ogni nuovo CSV aggiunge un riscontro allo storico. Il responsabile usa un accesso gestione separato. L'interfaccia statica è in `email/`, ma serve ancora collegare un servizio condiviso per rendere attivi i salvataggi da computer diversi. L'email è un'identità dichiarata, non verificata. Nel repository non vengono conservati dati aziendali.
+
 Sito statico per l'analisi delle pratiche fatturate e incassate con SAL potenzialmente da caricare. Carica un solo export Excel `STATI_Pratiche_creat_*.xlsx` di una sede alla volta: tutto viene elaborato nel browser, senza archiviare il file.
 
 ## Regole
