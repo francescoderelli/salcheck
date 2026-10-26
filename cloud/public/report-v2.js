@@ -241,12 +241,13 @@ function selectScenario(r){
  '<option value="">— IVA da verificare (intervallo) —</option>'+
  r.scenarios.map(s=>'<option value="'+esc(s.fx)+'" '+(chosen?.fx===s.fx?'selected':'')+'>'+esc(ivaLabel(s.fx))+' · SAL '+euroC(s.gap)+'</option>').join('')+'</select>';
 }
-let cloudDeclarations=new Map(),drafts=new Map(),cloudSave=null,cloudDownload=null;
+let cloudDeclarations=new Map(),drafts=new Map(),cloudSave=null,cloudDownload=null,cloudReadOnly=false;
 function draftFor(r){
  if(!drafts.has(r.key)){const d=cloudDeclarations.get(r.key),p=d?.promise&&!d.promise.closedAt?d.promise:null;drafts.set(r.key,{status:d?.status||'Da verificare',notes:d?.notes||'',version:d?.version||0})}
  return drafts.get(r.key);
 }
 function selectReview(r){
+ if(cloudReadOnly){const saved=cloudDeclarations.get(r.key);return '<div class="cloud-review"><b>'+esc(saved?.status||'Da verificare')+'</b><span>'+esc(saved?.notes||'')+'</span>'+(saved?'<span class="hint">Salvato il '+esc(new Date(saved.updatedAt).toLocaleString('it-IT'))+'</span>':'')+'</div>';}
  const d=draftFor(r),saved=cloudDeclarations.get(r.key),locked=saved?.promise&&!saved.promise.closedAt;
  return '<div class="cloud-review"><select class="review" aria-label="Verifica '+esc(r.code)+'" data-review="'+encodeURIComponent(r.key)+'">'+REVIEW_OPTIONS.map(x=>'<option '+(d.status===x?'selected':'')+'>'+esc(x)+'</option>').join('')+'</select><textarea data-note="'+encodeURIComponent(r.key)+'" aria-label="Note '+esc(r.code)+'" rows="1" maxlength="1400" placeholder="Note RA">'+esc(d.notes)+'</textarea><button type="button" class="primary tiny" data-cloud-save="'+encodeURIComponent(r.key)+'">Salva</button>'+(saved?'<span class="hint">Salvato il '+esc(new Date(saved.updatedAt).toLocaleString('it-IT'))+'</span>':'')+'</div>';
 }
@@ -438,12 +439,12 @@ function applyDeclarations(declarations){
 }
 window.SALReport={
  mount({rows,declarations,source,user,onSave,onDownload}){
-  cloudSave=onSave;cloudDownload=onDownload;drafts.clear();applyDeclarations(declarations);const raw=fx.store();rows.forEach(r=>raw.addGroup(r));
+  cloudReadOnly=user.role==='director';cloudSave=cloudReadOnly?null:onSave;cloudDownload=onDownload;drafts.clear();applyDeclarations(declarations);const raw=fx.store();rows.forEach(r=>raw.addGroup(r));
   book={...raw.finalize(settings()),sourceStore:raw};rowLookup=new Map(book.rows.map(r=>[r.key,r]));restoreScenarios(book.rows);
-  fileName=user.role==='manager'?(source?.source||'Report'):('Mie_sedi');
+  fileName=user.role!=='ra'?(source?.source||'Report'):('Mie_sedi');
   network='all';scope='all';selectedSites.clear();selectedMacroarea='';selectedYear='';siteSearchTerm='';focus='';tab='full-sal';term='';coefficient='';bankRate='';page=0;
   $('networkFilter').value='all';$('siteSearchInput').value='';$('search').value='';$('coef').value='';$('bankRateFilter').value='';
-  const allButton=document.querySelector('[data-scope="all"]');allButton.textContent=user.role==='manager'?'Tutte le sedi':'Tutte le mie sedi';
+  const allButton=document.querySelector('[data-scope="all"]');allButton.textContent=user.role!=='ra'?'Tutte le sedi':'Tutte le mie sedi';
   const missing=rows.some(r=>!r.financeLines);
   $('reportNotice').hidden=!missing;$('reportNotice').textContent='La precedente importazione non ha conservato indirizzi e dettagli V2. Il responsabile può recuperarli dal CSV già caricato, senza cambiare importi, dichiarazioni o storico.';
   renderMacroareas();renderYears();renderFileScope();setPickerOpen(false);renderAll();$('dashboard').hidden=false;

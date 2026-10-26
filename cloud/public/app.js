@@ -19,11 +19,12 @@ function renderCases(){
  $('cases').innerHTML=rows.slice(casePage*50,(casePage+1)*50).map(r=>{const d=r.declaration,p=d?.promise&&!d.promise.closedAt?d.promise:null,key=encodeURIComponent(r.key),amount=p?.expected??(r.fullSal?r.remaining:null);
  return `<tr data-key="${esc(key)}"><td><b>${esc(label(r.site))}</b><br>${esc(r.code)}</td><td class="num">${euro(r.prodotto)}</td><td class="num">${r.fullSal?euro(r.remaining):r.partial?euro(r.pMin)+' – '+euro(r.pMax):'—'}</td><td><select aria-label="Dichiarazione ${esc(r.code)}">${outcomes.map(s=>`<option${s===(d?.status||'Da verificare')?' selected':''}>${esc(s)}</option>`).join('')}</select></td><td><span>${euro(amount)}</span></td><td><textarea rows="1" maxlength="1400" aria-label="Note ${esc(r.code)}">${esc(d?.notes||'')}</textarea></td><td><button data-save="${esc(key)}">Salva</button></td></tr>`;
  }).join('')||'<tr><td colspan="7" class="empty">Nessuna pratica da mostrare per questa email.</td></tr>';
+ if(data.user.role==='director'){$('cases').querySelectorAll('select,textarea').forEach(x=>x.disabled=true);$('cases').querySelectorAll('[data-save]').forEach(x=>x.remove())}
 }
 function renderFollowups(){
  const rows=data.followups,names=['In attesa del prossimo CSV','Importo riscontrato','Aumento parziale','Nessun aumento'];
  $('stats').innerHTML=names.map(s=>`<span><b>${rows.filter(x=>x.status===s).length}</b> ${esc(s)}</span>`).join('');
- $('followups').innerHTML=rows.map(x=>{const d=x.declaration;return `<tr><td><b>${esc(label(d.site))}</b><br>${esc(d.code)}${data.user.role==='manager'?'<br>'+esc(d.ra):''}</td><td>${esc(date(d.promise.at))}</td><td class="num">${euro(d.promise.baseline)}</td><td class="num">${euro(d.promise.expected)}</td><td class="num">${euro(x.product)}</td><td class="num">${euro(x.delta)}</td><td class="num">${euro(x.remaining)}</td><td><b>${esc(x.status)}</b><br><span class="small">Dichiarazione: ${esc(d.status)}</span>${data.user.role==='manager'&&!d.promise.closedAt?`<br><button class="secondary" data-archive="${esc(encodeURIComponent(d.key))}">Chiudi impegno</button>`:''}</td></tr>`}).join('')||'<tr><td colspan="8" class="empty">Nessun SAL ancora dichiarato.</td></tr>';
+ $('followups').innerHTML=rows.map(x=>{const d=x.declaration;return `<tr><td><b>${esc(label(d.site))}</b><br>${esc(d.code)}${data.user.role!=='ra'?'<br>'+esc(d.ra):''}</td><td>${esc(date(d.promise.at))}</td><td class="num">${euro(d.promise.baseline)}</td><td class="num">${euro(d.promise.expected)}</td><td class="num">${euro(x.product)}</td><td class="num">${euro(x.delta)}</td><td class="num">${euro(x.remaining)}</td><td><b>${esc(x.status)}</b><br><span class="small">Dichiarazione: ${esc(d.status)}</span>${data.user.role==='manager'&&!d.promise.closedAt?`<br><button class="secondary" data-archive="${esc(encodeURIComponent(d.key))}">Chiudi impegno</button>`:''}</td></tr>`}).join('')||'<tr><td colspan="8" class="empty">Nessun SAL ancora dichiarato.</td></tr>';
 }
 async function renderHistory(){
  const h=await request('/api/history?offset='+historyOffset);historyMore=h.hasMore;
@@ -41,12 +42,12 @@ async function loadReport(){
  reportRevision=data.reportRevision||data.revision;$('reportLoading').hidden=true;
 }
 async function refresh(){
- data=await request('/api/overview?summary=1');document.body.classList.add('signed-in');$('entry').hidden=true;$('logout').hidden=false;$('workspace').hidden=false;$('identity').textContent=data.user.email+(data.user.role==='manager'?' · Gestione CSV':'');$('managerPanel').hidden=data.user.role!=='manager';
- const sites=data.sites.map(label);$('mySites').textContent=data.user.role==='manager'?'Tutte le sedi pubblicate':sites.length?sites.join(' · '):'Nessuna sede disponibile per la tua email';
+ data=await request('/api/overview?summary=1');document.body.classList.add('signed-in');$('entry').hidden=true;$('logout').hidden=false;$('workspace').hidden=false;$('identity').textContent=data.user.email+(data.user.role==='manager'?' · Gestione CSV':data.user.role==='director'?' · Direzionale · Sola consultazione':'');$('managerPanel').hidden=data.user.role!=='manager';
+ const sites=data.sites.map(label);$('mySites').textContent=data.user.role!=='ra'?'Tutte le sedi pubblicate':sites.length?sites.join(' · '):'Nessuna sede disponibile per la tua email';
  $('source').textContent=data.source?'Aggiornamento: '+date(data.source.publishedAt)+(data.user.role==='manager'?' · '+data.source.source:''):'Nessun CSV ancora pubblicato.';
  renderCases();renderFollowups();await renderHistory();await loadReport();
 }
-$('entry').onsubmit=e=>{e.preventDefault();run(async()=>{const s=await request('/api/session',{email:$('email').value},false);token=s.token;casePage=historyOffset=0;await refresh();message(data.sites.length?'Report V2 aggiornato sulle sedi associate alla tua email.':'Nessuna pratica pubblicata per questa email. Controlla l’indirizzo o attendi il CSV del responsabile.');})};
+$('entry').onsubmit=e=>{e.preventDefault();run(async()=>{const s=await request('/api/session',{email:$('email').value},false);token=s.token;casePage=historyOffset=0;await refresh();message(data.sites.length?(data.user.role==='director'?'Accesso direzionale: tutte le sedi, in sola consultazione.':'Report V2 aggiornato sulle sedi associate alla tua email.'):'Nessuna pratica pubblicata per questa email. Controlla l’indirizzo o attendi il CSV del responsabile.');})};
 $('logout').onclick=()=>run(async()=>{try{await request('/api/logout',{})}finally{clear();message('Sessione chiusa. Lo storico resta salvato.')}});
 $('refresh').onclick=()=>run(async()=>{await refresh();message('Dati aggiornati dall’archivio condiviso.')});
 $('search').oninput=()=>{casePage=0;renderCases()};

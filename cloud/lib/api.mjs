@@ -1,3 +1,4 @@
+import {isDirector} from './access.mjs';
 import {CloudStore,ServiceError,fail,text} from './store.mjs';
 const emailOf=x=>{if(typeof x!=='string'||x.length>255||!/^\S+@\S+\.\S+$/.test(x.trim()))fail(400,'Inserisci un’email valida.');return x.trim().toLowerCase()};
 const hash=async s=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s))),x=>x.toString(16).padStart(2,'0')).join('');
@@ -23,10 +24,10 @@ export async function handle(request,env,identity){
   }
   if(path==='/api/session'&&method==='POST'){
    const manager=body.manager===true;if(manager)await owner();
-   const email=manager?identity.email.toLowerCase():emailOf(body.email),token=crypto.randomUUID()+crypto.randomUUID();
+   const email=manager?identity.email.toLowerCase():emailOf(body.email),role=manager?'manager':isDirector(email)?'director':'ra',token=crypto.randomUUID()+crypto.randomUUID();
    await store.q('DELETE FROM sessions WHERE expires<?',Date.now()).run();
-   await store.q('INSERT INTO sessions VALUES(?,?,?,?,?)',await hash(token),email,manager?'manager':'ra',manager?identity.userId:null,Date.now()+8*3600000).run();
-   return json({token,user:{email,role:manager?'manager':'ra'}});
+   await store.q('INSERT INTO sessions VALUES(?,?,?,?,?)',await hash(token),email,role,manager?identity.userId:null,Date.now()+8*3600000).run();
+   return json({token,user:{email,role}});
   }
   const token=/^Bearer ([a-zA-Z0-9-]+)$/.exec(request.headers.get('authorization')||'')?.[1];
   if(!token)fail(401,'Inserisci di nuovo la tua email.');
@@ -45,6 +46,7 @@ export async function handle(request,env,identity){
    }
   }
   if(method==='POST'){
+   if(user.role==='director')fail(403,'Accesso direzionale in sola consultazione.');
    if(path==='/api/imports')return json(await store.startImport(user,body),201);
    const match=/^\/api\/imports\/([a-f0-9-]{36})\/(rows|commit|metadata)$/.exec(path);
    if(match)return json(match[2]==='rows'?await store.stage(user,match[1],body.rows):match[2]==='metadata'?await store.completeMetadata(user,match[1]):await store.commit(user,match[1]));

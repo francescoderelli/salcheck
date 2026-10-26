@@ -36,3 +36,6 @@ Gli importi sono in centesimi. Il prodotto iniziale e il SAL atteso non cambiano
 - Build e pubblicazione tramite gli helper ufficiali Sites. Conservare `.openai/hosting.json` per aggiornare lo stesso progetto.
 - Per la prova locale, `.dev.vars` (ignorato) può contenere `SALCHECK_OWNER_EMAIL="seedy@sites.test"`, identità fittizia del mock Sites. Migrazioni applicate solo all'archivio locale.
 
+
+### Accesso Direzionale
+Le cinque email abilitate in `lib/access.mjs` entrano dallo stesso modulo email. Il ruolo director legge tutte le sedi, dichiarazioni, riscontri e storico; non può importare CSV, recuperare metadati, salvare dichiarazioni, chiudere impegni o scaricare il backup gestionale. Controlli applicati nel servizio e nell’interfaccia. Il proprietario ha autorizzato la sola email, senza verifica: conoscendo una delle email direzionali è possibile impersonare quel ruolo.
