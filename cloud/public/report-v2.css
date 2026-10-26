@@ -98,3 +98,5 @@
 @media(max-width:700px){.ra-tools{padding:12px}.ra-buttons,.ra-buttons button{width:100%}}
 
 body{background:transparent}main{max-width:none;padding:0}.ra-tools{display:none}.cloud-review{display:grid;gap:6px;min-width:190px}.cloud-review input,.cloud-review textarea{box-sizing:border-box;width:100%;font:inherit;border:1px solid #bfd0df;border-radius:5px;padding:7px}.cloud-review label{font-size:11px;color:#516f89}.cloud-review textarea{min-height:42px}.cloud-review button{justify-self:start}.cloud-review .hint{white-space:normal}.cloud-review select{width:100%}#reportNotice{margin:0 0 15px}[hidden]{display:none!important}
+
+.detail-table td:first-child .original{white-space:normal;max-width:260px;overflow-wrap:anywhere;line-height:1.4;margin-top:3px}

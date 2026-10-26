@@ -13,12 +13,12 @@ test('V2 report retains mixed VAT, withholding, all categories and filters RA be
  const upgraded={};vm.runInNewContext(readFileSync(new URL('../public/assets/engine.js',import.meta.url),'utf8'),upgraded);
  const raw=upgraded.SALCore.store(),baseline=original.SALCore.store();
  const lines=[
- {CountryRete:'IT-Dirette',Sede:'Brescia',ResponsabileArea:ra.email,CodiceCommessa:'MIX',DataDelibera:'01/01/2023',macroarea:'NORD',StatoPratica:'In corso','Venduto€':1000,'ProdottoLordo€':200,'FatturatoTotale€':1100,'IncassatoTotale€':1100},
- {CountryRete:'IT-Dirette',Sede:'Brescia',ResponsabileArea:ra.email,CodiceCommessa:'MIX',DataDelibera:'01/01/2023',macroarea:'NORD',StatoPratica:'In corso','Venduto€':1000,'ProdottoLordo€':500,'FatturatoTotale€':1220,'IncassatoTotale€':1220},
+ {CountryRete:'IT-Dirette',Sede:'Brescia',ResponsabileArea:ra.email,CodiceCommessa:'MIX',DataDelibera:'01/01/2023',macroarea:'NORD',StatoPratica:'In corso',Indirizzo:'Via Esempio 12, Brescia (dati fittizi)','Venduto€':1000,'ProdottoLordo€':200,'FatturatoTotale€':1100,'IncassatoTotale€':1100},
+ {CountryRete:'IT-Dirette',Sede:'Brescia',ResponsabileArea:ra.email,CodiceCommessa:'MIX',DataDelibera:'01/01/2023',macroarea:'NORD',StatoPratica:'In corso',Indirizzo:'Via Esempio 12, Brescia (dati fittizi)','Venduto€':1000,'ProdottoLordo€':500,'FatturatoTotale€':1220,'IncassatoTotale€':1220},
  {CountryRete:'IT-Franchising',Sede:'Brescia 2',ResponsabileArea:ra.email,CodiceCommessa:'OTHER',DataDelibera:'01/01/2026',macroarea:'NORD','Venduto€':1000,'ProdottoLordo€':0,'FatturatoTotale€':0,'IncassatoTotale€':0},
  {CountryRete:'IT-Dirette',Sede:'Brescia',ResponsabileArea:ra.email,CodiceCommessa:'BANK',DataDelibera:'01/01/2023',macroarea:'NORD','Venduto€':1000,'ProdottoLordo€':0,'FatturatoTotale€':1220,'IncassatoTotale€':1140}
  ];for(const line of lines){raw.add(line);baseline.add(line)}
- const {store:s}=fixture();await publish(s,raw.finalize().rows);const page=await s.report(ra,{revision:await s.revision()});assert.equal(page.rows.length,3);assert.equal(page.rows.find(x=>x.code==='MIX').financeLines.length,2);
+ const {store:s}=fixture();await publish(s,raw.finalize().rows);const page=await s.report(ra,{revision:await s.revision()});assert.equal(page.rows.length,3);assert.equal(page.rows.find(x=>x.code==='MIX').financeLines.length,2);assert.equal(page.rows.find(x=>x.code==='MIX').address,'Via Esempio 12, Brescia (dati fittizi)');
  const hydrated=upgraded.SALCore.store();page.rows.forEach(x=>hydrated.addGroup(x));const got=hydrated.finalize().rows.sort((a,b)=>a.code.localeCompare(b.code)),expected=baseline.finalize().rows.sort((a,b)=>a.code.localeCompare(b.code));
  for(let i=0;i<got.length;i++){for(const key of Object.keys(expected[i]))assert.deepEqual(JSON.parse(JSON.stringify(got[i][key])),JSON.parse(JSON.stringify(expected[i][key])),got[i].code+' '+key)}
  assert.equal(got.find(x=>x.code==='BANK').cashWithholdingRate,8);assert.equal(got.find(x=>x.code==='MIX').coefficient,'110% + 122%');

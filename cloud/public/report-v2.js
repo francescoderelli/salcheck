@@ -276,7 +276,7 @@ function renderDetails(){
    '"><button type="button" class="sort-head '+(selected?'is-sorted':'')+'" data-detail-sort="'+esc(x.key)+'" title="Ordina '+esc(x.label)+' per importo">'+esc(x.label)+' <span class="sort-indicator" aria-hidden="true">'+arrow+'</span></button></th>';
  }).join('')+'</tr>';
  $('detailTable').innerHTML=currentRows.slice(page*PAGE,(page+1)*PAGE).map(r=>{
-  let h='<tr class="'+(isExcluded(r)?'review-excluded':'')+'"><td><strong>'+esc(r.code)+'</strong><div class="original">'+esc(r.address).slice(0,70)+'</div>'+(raFeedback.has(r.key)?'<div class="ra-feedback-indicator">RA: '+esc(raFeedback.get(r.key).status||'Verifica ricevuta')+'</div>':'')+'</td><td>'+esc(r.year||'—')+'</td><td>'+esc(r.site)+'</td><td>'+esc(r.network==='IT-Franchising'?'Franchising':'Diretta')+'</td><td>'+esc(r.state)+'</td>';
+  let h='<tr class="'+(isExcluded(r)?'review-excluded':'')+'"><td><strong>'+esc(r.code)+'</strong><div class="original" data-site-address>'+esc(r.address||'Indirizzo non disponibile nel CSV pubblicato')+'</div>'+(raFeedback.has(r.key)?'<div class="ra-feedback-indicator">RA: '+esc(raFeedback.get(r.key).status||'Verifica ricevuta')+'</div>':'')+'</td><td>'+esc(r.year||'—')+'</td><td>'+esc(r.site)+'</td><td>'+esc(r.network==='IT-Franchising'?'Franchising':'Diretta')+'</td><td>'+esc(r.state)+'</td>';
   h+=moneyTd(r.venduto)+moneyTd(r.prodotto)+moneyTd(r.fatturato)+cashTd(r);
   if(tab==='partial-sal'){
     const result=simulatedRange(r);
