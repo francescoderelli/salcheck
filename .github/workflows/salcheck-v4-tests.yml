@@ -1,0 +1,31 @@
+name: SALCheck V4 checks
+
+on:
+  push:
+    branches: [salcheck-v4]
+    paths:
+      - 'cloud/**'
+      - '.github/workflows/salcheck-v4-tests.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Test V2 economic engine, RA access and V4 history/streaming
+        working-directory: cloud
+        run: node --test tests/workflow.test.mjs
+      - name: Check JavaScript module syntax
+        working-directory: cloud
+        run: |
+          node --check lib/api.mjs
+          node --check lib/store.mjs
+          node --check public/app.js
+          node --check public/report-v2.js
