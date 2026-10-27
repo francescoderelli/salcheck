@@ -3,9 +3,9 @@ const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"']/g,
 const euro=n=>n===null||n===undefined?'—':new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR'}).format(n/100),date=s=>s?new Date(s).toLocaleString('it-IT'):'—';
 const label=s=>s==='EDAC_BS'?'Brescia 1':s==='EDAC_BS2'?'Brescia 2':s;
 const outcomes=['Da verificare','SAL da caricare','Già registrato','Lavoro non eseguito','Acconto','Da approfondire','Da escludere'];
-let token='',data,managerMode=false,busy=false,casePage=0,followupPage=0,historyOffset=0,historyMore=false,uploadOffset=0,uploadMore=false,service,reportRevision=null;
+let token='',data,managerMode=false,busy=false,casePage=0,followupPage=0,historyOffset=0,historyMore=false,uploadOffset=0,uploadMore=false,service,reportRevision=null,reportSite='',reportNetwork='',reportScopeKey='';
 function message(s){$('message').textContent=s}
-function clear(){token='';data=null;reportRevision=null;document.body.classList.remove('signed-in');$('v2Report').contentWindow.SALReport?.clear();document.querySelectorAll('[data-view]').forEach(x=>{x.setAttribute('aria-pressed',String(x.dataset.view==='reportView'));$(x.dataset.view).hidden=x.dataset.view!=='reportView'});$('workspace').hidden=true;$('entry').hidden=false;$('logout').hidden=true;$('identity').textContent='Responsabili Area';$('cases').replaceChildren();$('followups').replaceChildren();$('history').replaceChildren();}
+function clear(){token='';data=null;reportRevision=null;reportSite='';reportNetwork='';reportScopeKey='';$('detailArea').hidden=true;$('v4Dashboard').hidden=true;document.body.classList.remove('signed-in');$('v2Report').contentWindow.SALReport?.clear();document.querySelectorAll('[data-view]').forEach(x=>{x.setAttribute('aria-pressed',String(x.dataset.view==='reportView'));$(x.dataset.view).hidden=x.dataset.view!=='reportView'});$('workspace').hidden=true;$('entry').hidden=false;$('logout').hidden=true;$('identity').textContent='Responsabili Area';$('cases').replaceChildren();$('followups').replaceChildren();$('history').replaceChildren();}
 async function run(fn){if(busy)return;busy=true;$('workspace').inert=true;$('entry').inert=true;try{await fn()}catch(e){message(e.message||'Operazione non riuscita.')}finally{busy=false;$('workspace').inert=false;$('entry').inert=false}}
 async function request(route,body,authorized=true){
  const response=await fetch(service+route,{method:body===undefined?'GET':'POST',headers:{...(authorized?{Authorization:'Bearer '+token}:{}),...(body===undefined?{}:{'Content-Type':'application/json'})},credentials:'same-origin',redirect:'error',body:body===undefined?undefined:JSON.stringify(body)});
@@ -49,8 +49,8 @@ async function renderHistory(){
  $('history').innerHTML=h.entries.map(x=>{const d=x.event==='comparison'?x.data.declaration:x.data,p=d.promise;return `<tr><td>${esc(date(x.at))}</td><td>${esc({declaration:'Dichiarazione salvata',comparison:'Nuovo CSV',archive:'Impegno chiuso'}[x.event])}${x.source?'<br>'+esc(x.source):''}</td><td>${esc(x.actorEmail||d.ra)}</td><td>${esc(label(d.site)+' · '+d.code)}</td><td>${esc(x.event==='comparison'?x.data.status:d.status)}</td><td class="num">${euro(p?.expected)}</td><td class="num">${euro(x.event==='comparison'?x.data.delta:p?.closure?.delta)}</td><td class="notes">${esc(d.notes)}</td></tr>`}).join('')||'<tr><td colspan="8" class="empty">Lo storico verrà compilato con i primi salvataggi.</td></tr>';
 }
 window.addEventListener('message',e=>{const frame=$('v2Report');if(e.origin===location.origin&&e.source===frame.contentWindow&&e.data?.type==='sal-report-height'&&Number.isFinite(e.data.height))frame.style.height=Math.max(650,Math.min(50000,e.data.height+10))+'px'});
-async function fetchReportRows(revision,reportRev){
- const args='revision='+encodeURIComponent(revision)+'&reportRevision='+encodeURIComponent(reportRev);
+async function fetchReportRows(revision,reportRev,site='',network=''){
+ const args='revision='+encodeURIComponent(revision)+'&reportRevision='+encodeURIComponent(reportRev)+'&site='+encodeURIComponent(site)+'&network='+encodeURIComponent(network);
  const response=await fetch(service+'/api/report-stream?'+args,{
   headers:{Authorization:'Bearer '+token,Accept:'application/x-ndjson'},
   credentials:'same-origin',redirect:'error',cache:'no-store'
@@ -112,10 +112,11 @@ async function loadReport(){
  const report=frame.contentWindow.SALReport;
  if(!report)throw Error('Report economico non disponibile.');
  const snapshot=data,revision=snapshot.reportRevision||snapshot.revision;
- if(reportRevision===revision){report.updateDeclarations(snapshot.declarations||[]);$('reportLoading').hidden=true;return}
+ const scopeKey=revision+'|'+reportNetwork+'|'+reportSite;
+ if(reportScopeKey===scopeKey){report.updateDeclarations(snapshot.declarations||[]);$('reportLoading').hidden=true;return}
  $('reportLoading').hidden=false;
  $('reportLoading').textContent='Preparazione report V4…';
- const rows=await fetchReportRows(snapshot.revision,revision);
+ const rows=await fetchReportRows(snapshot.revision,revision,reportSite,reportNetwork);
  // The import can change while the stream is in flight: never mount mismatched data.
  if(data!==snapshot)throw Error('Il CSV è stato aggiornato durante il caricamento: premi Aggiorna.');
  $('reportLoading').textContent='Elaborazione economica di '+rows.length.toLocaleString('it-IT')+' pratiche…';
@@ -125,16 +126,59 @@ async function loadReport(){
   onDownload:(bytes,name,type)=>{const blob=new Blob([bytes],{type}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),30000)},
   onSave:async input=>{await request('/api/declarations',input);await refresh();message('Dichiarazione salvata nello storico condiviso.')}
  });
- reportRevision=revision;
+ reportRevision=revision;reportScopeKey=scopeKey;
  $('reportLoading').hidden=true;
 }
+const prettyCount=n=>new Intl.NumberFormat('it-IT').format(n||0);
+function fastMoney(cents){return new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR',maximumFractionDigits:0}).format((cents||0)/100)}
+function renderFastDashboard(result){
+ const all=result.sites||[],cols=['practices','venduto','fullSal','partialCount','pMin','pMax','fullCount'];
+ const total=Object.fromEntries(cols.map(k=>[k,all.reduce((sum,x)=>sum+(Number(x[k])||0),0)]));
+ $('fastPractices').textContent=prettyCount(total.practices);
+ $('fastSites').textContent=prettyCount(all.length)+' sedi/reti';
+ $('fastSold').textContent=fastMoney(total.venduto);
+ $('fastFull').textContent=fastMoney(total.fullSal);
+ $('fastFullCount').textContent=prettyCount(total.fullCount)+' pratiche';
+ $('fastPartial').textContent=total.partialCount?(total.pMin===total.pMax?fastMoney(total.pMin):fastMoney(total.pMin)+' – '+fastMoney(total.pMax)):'0 €';
+ $('fastPartialCount').textContent=prettyCount(total.partialCount)+' pratiche · ipotesi IVA';
+ $('fastDescription').textContent=prettyCount(all.length)+' sedi/reti · '+prettyCount(total.practices)+' commesse · riepilogo dal database';
+ const ranked=all.slice().sort((a,b)=>Number(b.fullSal||0)-Number(a.fullSal||0)||Number(b.pMax||0)-Number(a.pMax||0)||(a.site||'').localeCompare(b.site||''));
+ $('fastSiteRows').innerHTML=ranked.map(x=>{
+  const site=String(x.site||''),network=String(x.network||'');
+  const range=Number(x.partialCount||0)?(x.pMin===x.pMax?fastMoney(x.pMin):fastMoney(x.pMin)+' – '+fastMoney(x.pMax)):'—';
+  return '<tr><td><button type="button" class="fast-site-link" data-site="'+encodeURIComponent(site)+'" data-network="'+encodeURIComponent(network)+'">'+esc(label(site))+'</button></td>'+
+   '<td>'+esc(network==='IT-Franchising'?'Franchising':'Diretta')+'</td><td class="num">'+prettyCount(x.practices)+'</td>'+
+   '<td class="num">'+fastMoney(x.fullSal)+'</td><td class="num">'+range+'</td></tr>';
+ }).join('')||'<tr><td colspan="5" class="empty">Nessuna pratica pubblicata per questo accesso.</td></tr>';
+ $('v4Dashboard').hidden=false;
+}
+async function showDetailedReport(site='',network=''){
+ // No database-wide row transfer is started until the user explicitly opens the detailed view.
+ reportSite=site;reportNetwork=network;reportScopeKey='';
+ $('detailArea').hidden=false;
+ $('v4Dashboard').hidden=true;
+ $('detailScope').textContent=site?'Dettaglio pratiche · '+label(site):'Report completo · tutte le sedi autorizzate';
+ $('reportLoading').hidden=false;
+ await loadReport();
+}
+$('fastSiteRows').onclick=e=>{
+ const button=e.target.closest('button[data-site]');if(!button)return;
+ run(()=>showDetailedReport(decodeURIComponent(button.dataset.site),decodeURIComponent(button.dataset.network)));
+};
+$('fullDetail').onclick=()=>run(()=>showDetailedReport());
+$('closeDetail').onclick=()=>{$('detailArea').hidden=true;$('v4Dashboard').hidden=false;};
+
 async function refresh(){
  data=await request('/api/overview?summary=1');document.body.classList.add('signed-in');$('entry').hidden=true;$('logout').hidden=false;$('workspace').hidden=false;$('identity').textContent=data.user.email+(data.user.role==='manager'?' · Gestione CSV':data.user.role==='director'?' · Direzionale · Sola consultazione':'');$('managerPanel').hidden=data.user.role!=='manager';$('uploadsNav').hidden=data.user.role==='ra';
  const sites=data.sites.map(label);$('mySites').textContent=data.user.role!=='ra'?'Tutte le sedi pubblicate':sites.length?sites.join(' · '):'Nessuna sede disponibile per la tua email';
  $('source').textContent=data.source?'Aggiornamento: '+date(data.source.publishedAt)+(data.user.role==='manager'?' · '+data.source.source:''):'Nessun CSV ancora pubblicato.';
  renderCases();if(!$('followupView').hidden)renderFollowups();
  if(!$('historyView').hidden)await renderHistory();if(!$('uploadsView').hidden)await renderUploads();
- await loadReport();
+ const fast=await request('/api/dashboard');
+ if(fast.revision!==data.revision||fast.reportRevision!==(data.reportRevision||data.revision))
+  throw Error('Il CSV è cambiato: aggiorna nuovamente.');
+ renderFastDashboard(fast);
+ if(!$('detailArea').hidden)await loadReport();
 }
 $('entry').onsubmit=e=>{e.preventDefault();run(async()=>{const s=await request('/api/session',{email:$('email').value},false);token=s.token;casePage=followupPage=historyOffset=uploadOffset=0;await refresh();message(data.sites.length?(data.user.role==='director'?'Accesso direzionale: tutte le sedi, in sola consultazione.':'Report V2 aggiornato sulle sedi associate alla tua email.'):'Nessuna pratica pubblicata per questa email. Controlla l’indirizzo o attendi il CSV del responsabile.');})};
 $('logout').onclick=()=>run(async()=>{try{await request('/api/logout',{})}finally{clear();message('Sessione chiusa. Lo storico resta salvato.')}});
