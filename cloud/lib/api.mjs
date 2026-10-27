@@ -23,17 +23,27 @@ export async function handle(request,env,identity){
    if((await store.first("SELECT value FROM state WHERE key='owner_id'"))?.value!==identity.userId)fail(403,'Accesso gestione non valido.');
   }
   if(path==='/api/session'&&method==='POST'){
-   const manager=body.manager===true;if(manager)await owner();
-   const email=manager?identity.email.toLowerCase():emailOf(body.email),role=manager?'manager':isDirector(email)?'director':'ra',token=crypto.randomUUID()+crypto.randomUUID();
+   const manager=body.manager===true,operational=body.operational===true;
+   if(manager&&operational)fail(400,'Seleziona un solo profilo.');
+   // A national write role must not be granted by typing someone's email.
+   // Use the same verified, stable Sites identity as the existing management login.
+   if(manager||operational)await owner();
+   const privileged=manager||operational;
+   const email=privileged?identity.email.toLowerCase():emailOf(body.email);
+   const role=manager?'manager':operational?'operational_director':isDirector(email)?'director':'ra';
+   const token=crypto.randomUUID()+crypto.randomUUID();
    await store.q('DELETE FROM sessions WHERE expires<?',Date.now()).run();
-   await store.q('INSERT INTO sessions VALUES(?,?,?,?,?)',await hash(token),email,role,manager?identity.userId:null,Date.now()+8*3600000).run();
+   await store.q('INSERT INTO sessions VALUES(?,?,?,?,?)',await hash(token),email,role,privileged?identity.userId:null,Date.now()+8*3600000).run();
    return json({token,user:{email,role}});
   }
   const token=/^Bearer ([a-zA-Z0-9-]+)$/.exec(request.headers.get('authorization')||'')?.[1];
   if(!token)fail(401,'Inserisci di nuovo la tua email.');
   const user=await store.first('SELECT * FROM sessions WHERE hash=? AND expires>?',await hash(token),Date.now());
   if(!user)fail(401,'Sessione scaduta. Accedi di nuovo.');
-  if(user.role==='manager'){await owner();if(user.owner_id!==identity.userId)fail(403,'Sessione gestione non valida.')}
+  if(user.role==='manager'||user.role==='operational_director'){
+   await owner();
+   if(user.owner_id!==identity.userId)fail(403,'Sessione privilegiata non valida.');
+  }
   if(path==='/api/logout'&&method==='POST'){await store.q('DELETE FROM sessions WHERE hash=?',user.hash).run();return json({ok:true})}
   if(method==='GET'){
    if(path==='/api/overview')return json(await store.overview(user,url.searchParams.get('summary')==='1'));
