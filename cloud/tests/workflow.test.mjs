@@ -154,3 +154,57 @@ test('V4 keeps the V2 report files and historical management screens',()=>{
  for(const label of ['SALReport','renderAll()','renderDetails()','cashWithholdingRate'])assert.ok(report.includes(label),label);
  for(const label of ['.brand','.config','.metrics','.detail-table'])assert.ok(css.includes(label),label);
 });
+
+test('V4 fast dashboard reads exact published per-site baselines without loading every practice',async()=>{
+ const {store:s,db,sql}=fixture();
+ const first=row(600000,ra.email,'FAST-1');
+ const second=row(800000,other.email,'FAST-2');
+ const partial={...row(300000,ra.email,'FAST-3'),fullSal:false,partial:true,pMin:150000,pMax:350000};
+ await publish(s,[first,second,partial]);
+ const before=sql.prepare('SELECT COUNT(*) AS count FROM audit').get().count;
+ const mine=await s.dashboard(ra);
+ const whole=await s.dashboard(manager);
+ const director=await s.dashboard({role:'director',email:'director@example.test'});
+ assert.equal(mine.reportRevision,mine.revision+':'+await s.metadataRevision());
+ assert.equal(mine.sites.length,1);
+ assert.equal(mine.sites[0].practices,2);
+ assert.equal(mine.sites[0].fullSal,400000);
+ assert.equal(mine.sites[0].pMin,150000);
+ assert.equal(mine.sites[0].pMax,350000);
+ assert.equal(whole.sites[0].practices,3);
+ assert.deepEqual(director.sites,whole.sites);
+ assert.equal(sql.prepare('SELECT COUNT(*) AS count FROM audit').get().count,before);
+ const detail=await s.report(ra,{revision:mine.revision,reportRevision:mine.reportRevision,site:'Brescia',network:'Italia'});
+ assert.equal(detail.rows.length,2);
+ assert.ok(detail.rows.every(x=>x.ra===ra.email));
+ assert.equal((await s.report(ra,{revision:mine.revision,site:'Non assegnata'})).rows.length,0);
+ await assert.rejects(s.report(ra,{revision:mine.revision,site:'A'.repeat(256)}),x=>x.status===400);
+ const session=await handle(new Request('https://sal.test/api/session',{
+  method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:ra.email})
+ }),{DB:db},null);
+ const token=(await session.json()).token;
+ const denied=await handle(new Request('https://sal.test/api/dashboard'),{DB:db},null);
+ assert.equal(denied.status,401);
+ const fast=await handle(new Request('https://sal.test/api/dashboard',{
+  headers:{Authorization:'Bearer '+token}
+ }),{DB:db},null);
+ assert.equal(fast.status,200);
+ assert.equal((await fast.json()).sites[0].practices,2);
+ await publish(s,[row(550000,ra.email,'FAST-1')]);
+ const updated=await s.dashboard(ra);
+ assert.notEqual(updated.revision,mine.revision);
+ assert.equal(updated.sites[0].practices,1);
+ assert.equal(updated.sites[0].fullSal,450000);
+});
+test('V4 initial page uses DB dashboard; exact V2 full detail is opt-in or site-scoped',()=>{
+ const app=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+ const html=readFileSync(new URL('../public/workspace.html',import.meta.url),'utf8');
+ for(const needle of ["request('/api/dashboard')",'renderFastDashboard(fast)','if(!$(\'detailArea\').hidden)await loadReport();', "site:url.searchParams.get('site')"]){
+  if(needle.startsWith('site:'))continue;
+  assert.ok(app.includes(needle),needle);
+ }
+ for(const id of ['v4Dashboard','detailArea','fastPractices','fastSiteRows','fullDetail','closeDetail'])
+  assert.ok(html.includes('id="'+id+'"'),id);
+ assert.ok(app.includes("request('/api/dashboard')"));
+ assert.ok(!app.includes('await loadReport();\n}\n$(\'entry\').onsubmit'));
+});
