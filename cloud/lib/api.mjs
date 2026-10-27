@@ -37,12 +37,14 @@ export async function handle(request,env,identity){
   if(path==='/api/logout'&&method==='POST'){await store.q('DELETE FROM sessions WHERE hash=?',user.hash).run();return json({ok:true})}
   if(method==='GET'){
    if(path==='/api/overview')return json(await store.overview(user,url.searchParams.get('summary')==='1'));
+   if(path==='/api/dashboard')return json(await store.dashboard(user));
    if(path==='/api/report-stream'){
     // Authenticated, role-scoped NDJSON: avoids one browser HTTP round-trip per 500 commissions.
     // Prime the stream before sending headers, so stale CSV revisions return an HTTP 409.
     const revision=url.searchParams.get('revision')||'';
     const reportRevision=url.searchParams.get('reportRevision')||undefined;
-    const opts={revision,reportRevision,limit:1000};
+    const opts={revision,reportRevision,limit:1000,
+     site:url.searchParams.get('site')||'',network:url.searchParams.get('network')||''};
     const first=await store.report(user,{...opts,cursor:''});
     const iterator=(async function*(){
      let page=first;
@@ -63,7 +65,7 @@ export async function handle(request,env,identity){
     });
     return new Response(stream,{headers:{...headers,'Content-Type':'application/x-ndjson; charset=utf-8','X-Content-Type-Options':'nosniff'}});
    }
-   if(path==='/api/report')return json(await store.report(user,{cursor:url.searchParams.get('cursor')||'',revision:url.searchParams.get('revision')||'',reportRevision:url.searchParams.get('reportRevision')||undefined}));
+   if(path==='/api/report')return json(await store.report(user,{cursor:url.searchParams.get('cursor')||'',revision:url.searchParams.get('revision')||'',reportRevision:url.searchParams.get('reportRevision')||undefined,site:url.searchParams.get('site')||'',network:url.searchParams.get('network')||''}));
    if(path==='/api/import-log'){
     const offset=Number(url.searchParams.get('offset')||0);
     return json(await store.importLog(user,offset));
