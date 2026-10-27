@@ -37,6 +37,32 @@ export async function handle(request,env,identity){
   if(path==='/api/logout'&&method==='POST'){await store.q('DELETE FROM sessions WHERE hash=?',user.hash).run();return json({ok:true})}
   if(method==='GET'){
    if(path==='/api/overview')return json(await store.overview(user,url.searchParams.get('summary')==='1'));
+   if(path==='/api/report-stream'){
+    // Authenticated, role-scoped NDJSON: avoids one browser HTTP round-trip per 500 commissions.
+    // Prime the stream before sending headers, so stale CSV revisions return an HTTP 409.
+    const revision=url.searchParams.get('revision')||'';
+    const reportRevision=url.searchParams.get('reportRevision')||undefined;
+    const opts={revision,reportRevision,limit:1000};
+    const first=await store.report(user,{...opts,cursor:''});
+    const iterator=(async function*(){
+     let page=first;
+     while(true){
+      yield {type:'page',rows:page.rows};
+      if(!page.next)break;
+      page=await store.report(user,{...opts,cursor:page.next});
+     }
+     yield {type:'complete',revision,reportRevision};
+    })();
+    const encoder=new TextEncoder();
+    const stream=new ReadableStream({
+     async pull(controller){
+      try{const next=await iterator.next();if(next.done)controller.close();else controller.enqueue(encoder.encode(JSON.stringify(next.value)+'\n'))}
+      catch(error){controller.error(error)}
+     },
+     async cancel(){await iterator.return()}
+    });
+    return new Response(stream,{headers:{...headers,'Content-Type':'application/x-ndjson; charset=utf-8','X-Content-Type-Options':'nosniff'}});
+   }
    if(path==='/api/report')return json(await store.report(user,{cursor:url.searchParams.get('cursor')||'',revision:url.searchParams.get('revision')||'',reportRevision:url.searchParams.get('reportRevision')||undefined}));
    if(path==='/api/history'){const offset=Number(url.searchParams.get('offset')||0);if(!Number.isSafeInteger(offset)||offset<0||offset>1000000)fail(400,'Pagina non valida.');return json(await store.history(user,offset))}
    if(path==='/api/backup'){
