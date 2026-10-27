@@ -53,6 +53,18 @@ export class CloudStore{
  async declarations(u){return (await this.all('SELECT data,version FROM declarations'+(allSites(u)?'':' WHERE ra=?'),...(allSites(u)?[]:[u.email]))).map(x=>({...JSON.parse(x.data),version:x.version}))}
  async results(u){const rows=await this.all("SELECT d.data,d.version,c.data AS current FROM declarations d LEFT JOIN current_rows c ON c.key=d.key WHERE json_extract(d.data,'$.promise') IS NOT NULL"+(allSites(u)?'':' AND d.ra=?'),...(allSites(u)?[]:[u.email])),revision=await this.revision();return rows.map(x=>result({...JSON.parse(x.data),version:x.version},x.current?JSON.parse(x.current):null,revision))}
  async overview(u,summaryOnly=false){const revision=await this.revision(),manager=allSites(u),args=manager?[]:[u.email];const cases=summaryOnly?[]:(await this.all(`SELECT c.data,d.data AS declaration,d.ra AS declarationRa,d.version FROM current_rows c LEFT JOIN declarations d ON d.key=c.key ${manager?'WHERE':'WHERE c.ra=? AND'} (json_extract(c.data,'$.fullSal')=1 OR json_extract(c.data,'$.partial')=1 OR d.key IS NOT NULL)` ,...args)).map(x=>({...JSON.parse(x.data),declaration:x.declaration?(manager||x.declarationRa===u.email?{...JSON.parse(x.declaration),version:x.version}:JSON.parse(x.declaration).promise?.closedAt?{version:x.version,status:'Da verificare',notes:'',promise:null}:null):null}));const sites=(await this.all("SELECT DISTINCT json_extract(data,'$.site') AS site FROM current_rows"+(manager?'':' WHERE ra=?')+' ORDER BY site',...args)).map(x=>x.site);const source=await this.first('SELECT source,committed_at AS publishedAt,expected AS count FROM imports WHERE id=?',revision);if(source&&!manager){source.source='CSV condiviso';source.count=cases.length}return {user:{email:u.email,role:u.role},revision,reportRevision:revision+':'+await this.metadataRevision(),source,sites,cases,declarations:await this.declarations(u),followups:await this.results(u)}}
+ // Published CSV snapshots and metadata-completion events remain in the original imports/audit tables.
+ // Managers and read-only directors can inspect this log; RA accounts cannot enumerate uploads.
+ async importLog(u,offset=0){
+  if(!allSites(u))fail(403,'Registro dei caricamenti riservato a gestione e direzione.');
+  if(!Number.isSafeInteger(offset)||offset<0||offset>1000000)fail(400,'Pagina non valida.');
+  const items=await this.all(`SELECT i.id,i.source,i.owner,i.committed_at AS publishedAt,i.expected AS count,
+   CASE WHEN EXISTS(SELECT 1 FROM audit a WHERE a.event='csv_metadata_completed' AND a.record_key=i.id)
+   THEN 'Recupero metadati' ELSE 'CSV Albert' END AS kind
+   FROM imports i WHERE i.committed_at IS NOT NULL
+   ORDER BY i.committed_at DESC,i.id DESC LIMIT 51 OFFSET ?`,offset);
+  return {items:items.slice(0,50),hasMore:items.length>50,offset};
+ }
  async metadataRevision(){return (await this.first("SELECT value FROM state WHERE key='report_metadata'"))?.value||''}
  async completeMetadata(u,id){
   const j=await this.job(u,id),revision=await this.revision();
