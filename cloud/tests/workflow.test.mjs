@@ -206,5 +206,7 @@ test('V4 initial page uses DB dashboard; exact V2 full detail is opt-in or site-
  for(const id of ['v4Dashboard','detailArea','fastPractices','fastSiteRows','fullDetail','closeDetail'])
   assert.ok(html.includes('id="'+id+'"'),id);
  assert.ok(app.includes("request('/api/dashboard')"));
- assert.ok(!app.includes('await loadReport();\n}\n$(\'entry\').onsubmit'));
+ const refresh=app.slice(app.indexOf('async function refresh(){'),app.indexOf("$('entry').onsubmit",app.indexOf('async function refresh(){')));
+ assert.ok(refresh.includes("if(!$('detailArea').hidden)await loadReport();"));
+ assert.equal(refresh.split('\n').filter(line=>line.trim()==='await loadReport();').length,0);
 });
