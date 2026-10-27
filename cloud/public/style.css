@@ -34,3 +34,27 @@ button:not(:disabled):hover{filter:brightness(.96)}
 #v2Report{background:#f1f5f9;border:0;width:100%;display:block}
 #followupPage{font-variant-numeric:tabular-nums}
 @media(max-width:700px){.top{align-items:flex-start}.top-status{text-align:left}.brand-icon{width:37px;height:37px}.top .brand strong{font-size:21px}#entry{padding:14px}.intro.hero{padding:22px 0 10px}}
+
+/* V4 quick dashboard: native database KPIs with the same surface palette as V2. */
+#v4Dashboard{margin-top:18px}
+#v4Dashboard .section-head{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:20px 0 12px}
+#v4Dashboard .section-head h2{font-size:20px;letter-spacing:-.03em;margin:0 0 3px}
+#v4Dashboard .section-head p{margin:0}
+#v4Dashboard .hint{font-size:12px;color:#71859b}
+.fast-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:16px 0 22px}
+.fast-metric{border:1px solid #dce6ef;border-radius:14px;padding:19px;background:#fff;box-shadow:0 3px 18px #12345108;min-width:0}
+.fast-metric span{display:block;color:#688398;font-size:12px;font-weight:670}
+.fast-metric strong{display:block;font-size:clamp(20px,2.15vw,31px);margin:9px 0 4px;color:#173b55;line-height:1.18;overflow-wrap:anywhere}
+.fast-metric small{display:block;font-size:11px;color:#72869a}
+.fast-metric.fast-accent{background:#173d5a;border-color:#173d5a}
+.fast-metric.fast-accent strong{color:#fff}
+.fast-metric.fast-accent span,.fast-metric.fast-accent small{color:#c8dbe9}
+.fast-report-card{border:1px solid #dce6ef;border-radius:14px;background:#fff;box-shadow:0 3px 18px #12345108;padding:18px 20px;margin-bottom:15px}
+.fast-site-table td{font-variant-numeric:tabular-nums}
+.fast-site-link{padding:0;border:0;background:none;color:#176ca4;font-weight:730;text-decoration:underline;text-decoration-color:#b5cedf;text-underline-offset:3px;white-space:normal;text-align:left}
+.fast-site-link:hover{color:#124b70;background:none}
+.fast-detail-head{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;background:#fff;border:1px solid #dce6ef;border-radius:12px;padding:14px 17px;margin:18px 0 10px}
+.fast-detail-head strong{font-size:17px;color:#173d5a}
+#reportView{background:transparent;border:0}
+@media(max-width:1050px){.fast-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){.fast-metrics{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.fast-metric{padding:12px}.fast-metric strong{font-size:20px}.fast-report-card{padding:12px}.fast-detail-head{align-items:stretch;flex-direction:column}.fast-detail-head button{width:100%}}
