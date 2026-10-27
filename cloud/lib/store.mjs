@@ -55,6 +55,32 @@ export class CloudStore{
  async overview(u,summaryOnly=false){const revision=await this.revision(),manager=allSites(u),args=manager?[]:[u.email];const cases=summaryOnly?[]:(await this.all(`SELECT c.data,d.data AS declaration,d.ra AS declarationRa,d.version FROM current_rows c LEFT JOIN declarations d ON d.key=c.key ${manager?'WHERE':'WHERE c.ra=? AND'} (json_extract(c.data,'$.fullSal')=1 OR json_extract(c.data,'$.partial')=1 OR d.key IS NOT NULL)` ,...args)).map(x=>({...JSON.parse(x.data),declaration:x.declaration?(manager||x.declarationRa===u.email?{...JSON.parse(x.declaration),version:x.version}:JSON.parse(x.declaration).promise?.closedAt?{version:x.version,status:'Da verificare',notes:'',promise:null}:null):null}));const sites=(await this.all("SELECT DISTINCT json_extract(data,'$.site') AS site FROM current_rows"+(manager?'':' WHERE ra=?')+' ORDER BY site',...args)).map(x=>x.site);const source=await this.first('SELECT source,committed_at AS publishedAt,expected AS count FROM imports WHERE id=?',revision);if(source&&!manager){source.source='CSV condiviso';source.count=cases.length}return {user:{email:u.email,role:u.role},revision,reportRevision:revision+':'+await this.metadataRevision(),source,sites,cases,declarations:await this.declarations(u),followups:await this.results(u)}}
  // Published CSV snapshots and metadata-completion events remain in the original imports/audit tables.
  // Managers and read-only directors can inspect this log; RA accounts cannot enumerate uploads.
+ // V4 fast dashboard: aggregate at the DB. Do not transfer all current_rows to render KPIs.
+ // Only published/current data, filtered by the exact same RA role scope as /api/report.
+ async dashboard(u){
+  const revision=await this.revision(),reportRevision=revision+':'+await this.metadataRevision();
+  const restricted=!allSites(u);
+  const rows=await this.all(`SELECT
+   json_extract(data,'$.site') AS site,
+   json_extract(data,'$.network') AS network,
+   COUNT(*) AS practices,
+   COALESCE(SUM(json_extract(data,'$.venduto')),0) AS venduto,
+   COALESCE(SUM(json_extract(data,'$.prodotto')),0) AS prodotto,
+   COALESCE(SUM(json_extract(data,'$.fatturato')),0) AS fatturato,
+   COALESCE(SUM(json_extract(data,'$.incassato')),0) AS incassato,
+   COALESCE(SUM(CASE WHEN json_extract(data,'$.fullSal')=1 THEN 1 ELSE 0 END),0) AS fullCount,
+   COALESCE(SUM(CASE WHEN json_extract(data,'$.fullSal')=1 THEN
+     json_extract(data,'$.remaining') ELSE 0 END),0) AS fullSal,
+   COALESCE(SUM(CASE WHEN json_extract(data,'$.partial')=1 THEN 1 ELSE 0 END),0) AS partialCount,
+   COALESCE(SUM(CASE WHEN json_extract(data,'$.partial')=1 THEN json_extract(data,'$.pMin') ELSE 0 END),0) AS pMin,
+   COALESCE(SUM(CASE WHEN json_extract(data,'$.partial')=1 THEN json_extract(data,'$.pMax') ELSE 0 END),0) AS pMax
+   FROM current_rows${restricted?' WHERE ra=?':''}
+   GROUP BY json_extract(data,'$.network'),json_extract(data,'$.site')`,
+   ...(restricted?[u.email]:[]));
+  if(revision!==await this.revision()||reportRevision!==revision+':'+await this.metadataRevision())
+   fail(409,'Il CSV è cambiato: aggiorna la pagina.');
+  return {revision,reportRevision,sites:rows};
+ }
  async importLog(u,offset=0){
   if(!allSites(u))fail(403,'Registro dei caricamenti riservato a gestione e direzione.');
   if(!Number.isSafeInteger(offset)||offset<0||offset>1000000)fail(400,'Pagina non valida.');
@@ -78,15 +104,26 @@ export class CloudStore{
   await this.batch([g,this.q(`UPDATE current_rows SET data=json_patch(current_rows.data,(SELECT json_object(${pairs.join(',')}) FROM staged s WHERE s.import_id=? AND s.key=current_rows.key))`,id),this.q("INSERT INTO state VALUES('report_metadata',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",id),this.q('UPDATE imports SET committed_at=? WHERE id=?',new Date().toISOString(),id),this.log(u,'csv_metadata_completed',id,{source:j.source,count:j.expected,revision}),this.q('DELETE FROM staged WHERE import_id=?',id),end]);
   return {ok:true,count:j.expected,revision,reportRevision:revision+':'+id};
  }
- async report(u,{cursor='',revision,reportRevision,limit=500}={}){
+ async report(u,{cursor='',revision,reportRevision,limit=500,site='',network=''}={}){
   text(cursor,800);
   if(!Number.isSafeInteger(limit)||limit<1||limit>1000)fail(400,'Dimensione pagina non valida.');
+  if(typeof site!=='string'||site.length>255||typeof network!=='string'||network.length>255)
+   fail(400,'Filtro sede non valido.');
   const current=await this.revision(),metadata=await this.metadataRevision();
-  if(revision!==current||reportRevision!==undefined&&reportRevision!==current+':'+metadata)fail(409,'Il CSV è cambiato: aggiorna il report.');
+  if(revision!==current||reportRevision!==undefined&&reportRevision!==current+':'+metadata)
+   fail(409,'Il CSV è cambiato: aggiorna il report.');
   const manager=allSites(u);
-  const found=await this.all('SELECT data,key FROM current_rows WHERE key>?'+(manager?'':' AND ra=?')+' ORDER BY key LIMIT ?',cursor,...(manager?[]:[u.email]),limit+1);
-  if(current!==await this.revision()||metadata!==await this.metadataRevision())fail(409,'Il report è cambiato: aggiorna la pagina.');
-  return {revision:current,rows:found.slice(0,limit).map(x=>JSON.parse(x.data)),next:found.length>limit?found[limit-1].key:null};
+  // Site detail is scoped in SQL, not filtered only by the frontend.
+  const where=['key>?'],params=[cursor];
+  if(!manager){where.push('ra=?');params.push(u.email)}
+  if(site){where.push("json_extract(data,'$.site')=?");params.push(site)}
+  if(network){where.push("json_extract(data,'$.network')=?");params.push(network)}
+  const found=await this.all('SELECT data,key FROM current_rows WHERE '+where.join(' AND ')+
+   ' ORDER BY key LIMIT ?',...params,limit+1);
+  if(current!==await this.revision()||metadata!==await this.metadataRevision())
+   fail(409,'Il report è cambiato: aggiorna la pagina.');
+  return {revision:current,rows:found.slice(0,limit).map(x=>JSON.parse(x.data)),
+   next:found.length>limit?found[limit-1].key:null};
  }
  async declare(u,b){if(u.role==='director')fail(403,'Accesso direzionale in sola consultazione.');const key=text(b.key,800),stored=await this.first('SELECT * FROM declarations WHERE key=?',key),current=await this.first('SELECT * FROM current_rows WHERE key=?',key),row=current?JSON.parse(current.data):null,prev=stored?JSON.parse(stored.data):null;if(!row||u.role!=='manager'&&(row.ra!==u.email||prev&&prev.ra!==u.email&&prev.promise&&!prev.promise.closedAt))fail(403,'Pratica non assegnata o non disponibile.');if((stored?.version||0)!==b.version)fail(409,'Dichiarazione cambiata: aggiorna prima di salvare.');const status=text(b.status,40);if(!outcomes.includes(status))fail(400,'Esito non ammesso.');let promise=prev?.promise||null;if(status==='SAL da caricare'){if(!promise||promise.closedAt){if(!row.fullSal&&!row.partial)fail(400,'Pratica senza SAL potenziale.');const expected=automaticExpected(row,b.iva);if(b.expected!==undefined&&b.expected!==null&&money(b.expected)!==expected)fail(400,'Il SAL è calcolato dal report e non può essere modificato.');if(expected===null||expected<=0||expected>1e12||expected>row.remaining)fail(400,'Indica un SAL positivo entro il residuo venduto meno prodotto.');promise={baseline:row.prodotto,expected,importId:current.import_id,at:new Date().toISOString(),actor:u.email,automatic:true,iva:row.partial?(b.iva||''):''}}else if(b.expected!==null&&b.expected!==undefined&&b.expected!==promise.expected)fail(409,'L’importo del primo impegno resta fisso. Chiudilo prima di aprirne uno nuovo.')}const d={key,ra:prev?.promise&&!prev.promise.closedAt?prev.ra:row.ra,site:row.site,code:row.code,network:row.network,status,notes:text(b.notes||'',1400),promise,updatedAt:new Date().toISOString(),actor:u.email},version=(stored?.version||0)+1;const [g,end]=this.guard('COALESCE((SELECT version FROM declarations WHERE key=?),0)=? AND EXISTS(SELECT 1 FROM current_rows WHERE key=? AND import_id=?)',[key,b.version,key,current.import_id]);await this.batch([g,this.q('INSERT INTO declarations VALUES(?,?,?,?) ON CONFLICT(key) DO UPDATE SET ra=excluded.ra,data=excluded.data,version=excluded.version',key,d.ra,JSON.stringify(d),version),this.log(u,'declaration',key,{...d,version}),end]);return {...d,version}}
  async archive(u,key,version){this.manager(u);const prior=await this.first('SELECT * FROM declarations WHERE key=?',text(key,800));if(!prior||prior.version!==version)fail(409,'Dichiarazione cambiata: aggiorna.');const d=JSON.parse(prior.data);if(!d.promise||d.promise.closedAt)fail(409,'Nessun impegno aperto.');const revision=await this.revision(),item=await this.first('SELECT data FROM current_rows WHERE key=?',key),r=result({...d,version},item?JSON.parse(item.data):null,revision);d.promise.closedAt=new Date().toISOString();d.promise.closure={product:r.product,delta:r.delta,remaining:r.remaining,status:r.status};const [g,end]=this.guard("(SELECT version FROM declarations WHERE key=?)=? AND COALESCE((SELECT value FROM state WHERE key='revision'),'')=?",[key,version,revision]);await this.batch([g,this.q('UPDATE declarations SET data=?,version=version+1 WHERE key=?',JSON.stringify(d),key),this.log(u,'archive',key,{...d,version:version+1}),end]);return{ok:true}}
