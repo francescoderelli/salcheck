@@ -59,3 +59,35 @@ La prima V4 ottimizzava il trasporto delle pratiche con un singolo streaming NDJ
 - Confrontare con cronometro tempi di ingresso, cruscotto rapido e dettaglio di sede; non assumere miglioramenti numerici senza misurazione reale.
 
 **Distribuire l'HEAD più recente del ramo `salcheck-v4`**, non i commit precedenti che ancora caricavano tutto il report all'accesso. Verificare la suite GitHub Actions su quel commit e conservare lo stesso progetto Sites/database.
+
+## Accesso Direzione operativa — autorizzazione nazionale con poteri RA (27 ottobre 2026)
+
+**Nuovo ruolo `operational_director`**: accesso a tutte le sedi, consultazione e modifica degli esiti RA su qualsiasi pratica, compresi salvataggio di `SAL da caricare`, note e chiusura di un impegno già dichiarato. L'azione è sempre attribuita nello storico all'email dell'utente; la responsabilità RA della pratica rimane quella del CSV.
+
+### Accesso
+- Percorso **`/direzione`** (link «Direzione operativa» nella schermata iniziale).
+- Il percorso usa l'autenticazione nativa ChatGPT Sites **già attiva per il proprietario**, confronta l'email verificata con la variabile `SALCHECK_OWNER_EMAIL` e associa/verifica l'identificativo stabile del proprietario a ogni chiamata API. Non usa OTP aggiuntivi.
+- Digitare l'email del proprietario nel normale campo email **non** attribuisce questo ruolo. Non aggiungere `operational_director` all'elenco delle email dichiarate di `access.mjs`.
+- È una modalità con privilegi nazionali prevista per il proprietario Sites verificato. Se in futuro il ruolo va conferito ad altri utenti, progettare un elenco di identità ChatGPT verificate e autorizzate dal proprietario (non una lista di indirizzi digitabili).
+
+### Matrice permessi
+| Operazione | RA | Direzione consultazione | Direzione operativa | Gestione |
+| --- | --- | --- | --- | --- |
+| Vedere tutte le sedi, filtri e storico | No | Sì | Sì | Sì |
+| Modificare le verifiche delle proprie pratiche | Sì | No | Sì | Sì |
+| Modificare le verifiche degli altri RA | No | No | Sì | Sì |
+| Chiudere impegni | No | No | Sì | Sì |
+| Registro CSV caricati | No | Sì | Sì | Sì |
+| Importare o completare CSV | No | No | No | Sì |
+| Esportare backup gestionale | No | No | No | Sì |
+
+### Test di pubblicazione per Work
+1. Eseguire `node --test tests/workflow.test.mjs`, controllare CI verde sul commit HEAD.
+2. Collegarsi a `/direzione` con l'account ChatGPT Sites proprietario attualmente autorizzato; verificare etichetta «Direzione operativa · Tutte le pratiche».
+3. Aprire una pratica di un RA diverso, salvare una verifica e verificare che nello storico restino email dell'autore e RA assegnato corretti.
+4. Provare a fare import CSV o scaricare il backup con questa sessione: richieste negate (403).
+5. Provare a digitare l'email del proprietario come email RA **senza** autenticazione nativa: non deve ottenere privilegi nazionali.
+6. Confermare che i cinque accessi Direzione esistenti restino in sola lettura, e gli RA restino limitati alle proprie pratiche.
+7. Verificare che `SALCHECK_OWNER_EMAIL` e lo stato `owner_id` del database esistente restino invariati durante il deploy: nessun reset.
+
+**Non pubblicare direttamente un ramo precedentemente distribuito**: aggiornare lo stesso progetto Sites con l'HEAD di `salcheck-v4` e mantenere D1 esistente.
