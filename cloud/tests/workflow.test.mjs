@@ -77,3 +77,80 @@ test('all five directors read the whole network and history but cannot mutate or
  assert.equal(JSON.stringify(['current_rows','declarations','comparisons','imports','audit','state'].map(t=>sql.prepare('SELECT * FROM '+t).all())),before);
  const unlisted=await (await req('session',{email:ra.email,role:'director',director:true})).json();assert.equal(unlisted.user.role,'ra');assert.equal((await (await req('overview',undefined,unlisted.token)).json()).cases.length,1);
 });
+
+test('V4 streams every RA-owned practice in one authenticated NDJSON response without exposing other RA data',async()=>{
+ const {store:s,db}=fixture();
+ const items=Array.from({length:1001},(_,i)=>row(600000,ra.email,'P'+String(i).padStart(5,'0')));
+ items.push(row(600000,other.email,'PRIVATE'));
+ await publish(s,items);
+ const env={DB:db,SALCHECK_OWNER_EMAIL:manager.email};
+ const req=(path,token)=>handle(new Request('https://sal.test/api/'+path,{
+  headers:token?{Authorization:'Bearer '+token}:undefined
+ }),env,null);
+ const session=await (await handle(new Request('https://sal.test/api/session',{
+  method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:ra.email})
+ }),env,null)).json();
+ const revision=await s.revision(),rev=revision+':'+await s.metadataRevision();
+ const path='report-stream?revision='+encodeURIComponent(revision)+'&reportRevision='+encodeURIComponent(rev);
+ assert.equal((await req(path,null)).status,401);
+ assert.equal((await req('report-stream?revision=old&reportRevision=old',session.token)).status,409);
+ const response=await req(path,session.token);
+ assert.equal(response.status,200);
+ assert.match(response.headers.get('content-type'),/application\/x-ndjson/);
+ const messages=(await response.text()).trim().split('\n').map(JSON.parse);
+ const pages=messages.filter(x=>x.type==='page');
+ assert.equal(pages.length,2);
+ assert.equal(pages[0].rows.length,1000);
+ assert.equal(pages[1].rows.length,1);
+ assert.equal(messages.at(-1).type,'complete');
+ const all=pages.flatMap(x=>x.rows);
+ assert.equal(all.length,1001);
+ assert.equal(new Set(all.map(x=>x.key)).size,1001);
+ assert.ok(all.every(x=>x.ra===ra.email));
+ assert.ok(all.every(x=>!x.code.includes('PRIVATE')));
+ const direct=await s.report(ra,{revision,reportRevision:rev,limit:1000});
+ assert.equal(direct.rows.length,1000);
+ await assert.rejects(s.report(ra,{revision,reportRevision:rev,limit:5001}),e=>e.status===400);
+});
+test('V4 preserves published CSV and metadata log with director-only read access',async()=>{
+ const {store:s,db}=fixture();
+ await publish(s,[row()]);
+ await publish(s,[row(650000)]);
+ const managerLog=await s.importLog(manager);
+ assert.equal(managerLog.items.length,2);
+ assert.ok(managerLog.items[0].publishedAt);
+ assert.ok(managerLog.items.every(x=>x.kind==='CSV Albert'));
+ assert.ok(managerLog.items.every(x=>x.count===1));
+ await assert.rejects(s.importLog(ra),e=>e.status===403);
+ const env={DB:db,SALCHECK_OWNER_EMAIL:manager.email};
+ const login=await handle(new Request('https://sal.test/api/session',{
+  method:'POST',headers:{'Content-Type':'application/json'},
+  body:JSON.stringify({email:'g.naso@acrobaticagroup.com'})
+ }),env,null);
+ const director=(await login.json()).token;
+ const res=await handle(new Request('https://sal.test/api/import-log',{
+  headers:{Authorization:'Bearer '+director}
+ }),env,null);
+ assert.equal(res.status,200);
+ const report=await res.json();
+ assert.equal(report.items.length,2);
+ const resident=await handle(new Request('https://sal.test/api/session',{
+  method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:ra.email})
+ }),env,null);
+ const raToken=(await resident.json()).token;
+ const denied=await handle(new Request('https://sal.test/api/import-log',{
+  headers:{Authorization:'Bearer '+raToken}
+ }),env,null);
+ assert.equal(denied.status,403);
+ assert.equal((await s.revision()).length>0,true);
+});
+test('V4 keeps the V2 report files and historical management screens',()=>{
+ const app=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+ const shell=readFileSync(new URL('../public/workspace.html',import.meta.url),'utf8');
+ const report=readFileSync(new URL('../public/report-v2.js',import.meta.url),'utf8');
+ const css=readFileSync(new URL('../public/report-v2.css',import.meta.url),'utf8');
+ for(const label of ['/api/report-stream','/api/overview?summary=1','/api/declarations','/api/backup'])assert.ok(app.includes(label),label);
+ for(const id of ['v2Report','entry','managerPanel','followupView','historyView','uploadsView'])assert.ok(shell.includes('id="'+id+'"'),id);
+ for(const label of ['SALReport','renderAll()','renderDetails()','cashWithholdingRate'])assert.ok(report.includes(label),label);
+ for(const label of ['.brand','.config','.metrics','.detail-table'])assert.ok(css.includes(label),label);
+});
