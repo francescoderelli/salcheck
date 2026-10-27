@@ -32,7 +32,7 @@ function renderFollowups(){
  $('followupPrevious').disabled=followupPage===0;
  $('followupNext').disabled=followupPage>=pages-1;
  $('followups').innerHTML=visible.map(x=>{
-  const d=x.declaration;return `<tr><td><b>${esc(label(d.site))}</b><br>${esc(d.code)}${data.user.role!=='ra'?'<br>'+esc(d.ra):''}</td><td>${esc(date(d.promise.at))}</td><td class="num">${euro(d.promise.baseline)}</td><td class="num">${euro(d.promise.expected)}</td><td class="num">${euro(x.product)}</td><td class="num">${euro(x.delta)}</td><td class="num">${euro(x.remaining)}</td><td><b>${esc(x.status)}</b><br><span class="small">Dichiarazione: ${esc(d.status)}</span>${data.user.role==='manager'&&!d.promise.closedAt?`<br><button class="secondary" data-archive="${esc(encodeURIComponent(d.key))}">Chiudi impegno</button>`:''}</td></tr>`;
+  const d=x.declaration;return `<tr><td><b>${esc(label(d.site))}</b><br>${esc(d.code)}${data.user.role!=='ra'?'<br>'+esc(d.ra):''}</td><td>${esc(date(d.promise.at))}</td><td class="num">${euro(d.promise.baseline)}</td><td class="num">${euro(d.promise.expected)}</td><td class="num">${euro(x.product)}</td><td class="num">${euro(x.delta)}</td><td class="num">${euro(x.remaining)}</td><td><b>${esc(x.status)}</b><br><span class="small">Dichiarazione: ${esc(d.status)}</span>${(data.user.role==='manager'||data.user.role==='operational_director')&&!d.promise.closedAt?`<br><button class="secondary" data-archive="${esc(encodeURIComponent(d.key))}">Chiudi impegno</button>`:''}</td></tr>`;
  }).join('')||'<tr><td colspan="8" class="empty">Nessun SAL ancora dichiarato.</td></tr>';
 }
 async function renderUploads(){
@@ -169,7 +169,7 @@ $('fullDetail').onclick=()=>run(()=>showDetailedReport());
 $('closeDetail').onclick=()=>{$('detailArea').hidden=true;$('v4Dashboard').hidden=false;};
 
 async function refresh(){
- data=await request('/api/overview?summary=1');document.body.classList.add('signed-in');$('entry').hidden=true;$('logout').hidden=false;$('workspace').hidden=false;$('identity').textContent=data.user.email+(data.user.role==='manager'?' · Gestione CSV':data.user.role==='director'?' · Direzionale · Sola consultazione':'');$('managerPanel').hidden=data.user.role!=='manager';$('uploadsNav').hidden=data.user.role==='ra';
+ data=await request('/api/overview?summary=1');document.body.classList.add('signed-in');$('entry').hidden=true;$('logout').hidden=false;$('workspace').hidden=false;$('identity').textContent=data.user.email+(data.user.role==='manager'?' · Gestione CSV':data.user.role==='operational_director'?' · Direzione operativa · Tutte le pratiche':data.user.role==='director'?' · Direzionale · Sola consultazione':'');$('managerPanel').hidden=data.user.role!=='manager';$('uploadsNav').hidden=data.user.role==='ra';
  const sites=data.sites.map(label);$('mySites').textContent=data.user.role!=='ra'?'Tutte le sedi pubblicate':sites.length?sites.join(' · '):'Nessuna sede disponibile per la tua email';
  $('source').textContent=data.source?'Aggiornamento: '+date(data.source.publishedAt)+(data.user.role==='manager'?' · '+data.source.source:''):'Nessun CSV ancora pubblicato.';
  renderCases();if(!$('followupView').hidden)renderFollowups();
@@ -236,6 +236,13 @@ $('saveBackup').onclick=()=>run(async()=>{try{await saveFolderBackup(true)}catch
 $('downloadBackup').onclick=()=>run(async()=>{backupMessage('Preparazione copia…');const r=await backupResponse(),blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=backupName();a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);backupMessage('Download avviato. Sposta il file nella cartella OneDrive per conservarlo online.');});
 (async()=>{try{const base=String(window.SALCHECK_SERVICE_URL||'').replace(/\/$/,'');service=base||(/\.github\.io$/.test(location.hostname)?null:location.origin);
  if(!service)throw Error('Archivio condiviso non ancora collegato. Questa versione non salva dichiarazioni finché il servizio non è attivato.');
- const c=await request('/api/config',undefined,false);if(!c.ready)throw Error('Archivio condiviso da configurare.');message('Inserisci la tua email per aprire le sedi associate nel CSV.');await restoreFolder();if(new URLSearchParams(location.search).get('gestione')==='1'){const s=await request('/api/session',{manager:true},false);token=s.token;await refresh();message('Gestione aperta. Importa il CSV per aggiornare tutte le sedi.');}
+ const c=await request('/api/config',undefined,false);if(!c.ready)throw Error('Archivio condiviso da configurare.');message('Inserisci la tua email per aprire le sedi associate nel CSV.');await restoreFolder();const mode=new URLSearchParams(location.search);
+ if(mode.get('gestione')==='1'||mode.get('direzione')==='1'){
+  const isManager=mode.get('gestione')==='1';
+  const session=await request('/api/session',isManager?{manager:true}:{operational:true},false);
+  token=session.token;
+  await refresh();
+  message(isManager?'Gestione aperta. Importa il CSV per aggiornare tutte le sedi.':'Direzione operativa: puoi verificare e salvare tutte le pratiche senza modificare i CSV.');
+ }
  }catch(e){$('login').disabled=true;message(e.message||'Archivio condiviso non disponibile.')}})();
 })();
