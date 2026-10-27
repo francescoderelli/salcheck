@@ -32,20 +32,92 @@ async function renderHistory(){
  $('history').innerHTML=h.entries.map(x=>{const d=x.event==='comparison'?x.data.declaration:x.data,p=d.promise;return `<tr><td>${esc(date(x.at))}</td><td>${esc({declaration:'Dichiarazione salvata',comparison:'Nuovo CSV',archive:'Impegno chiuso'}[x.event])}${x.source?'<br>'+esc(x.source):''}</td><td>${esc(x.actorEmail||d.ra)}</td><td>${esc(label(d.site)+' · '+d.code)}</td><td>${esc(x.event==='comparison'?x.data.status:d.status)}</td><td class="num">${euro(p?.expected)}</td><td class="num">${euro(x.event==='comparison'?x.data.delta:p?.closure?.delta)}</td><td class="notes">${esc(d.notes)}</td></tr>`}).join('')||'<tr><td colspan="8" class="empty">Lo storico verrà compilato con i primi salvataggi.</td></tr>';
 }
 window.addEventListener('message',e=>{const frame=$('v2Report');if(e.origin===location.origin&&e.source===frame.contentWindow&&e.data?.type==='sal-report-height'&&Number.isFinite(e.data.height))frame.style.height=Math.max(650,Math.min(50000,e.data.height+10))+'px'});
+async function fetchReportRows(revision,reportRev){
+ const args='revision='+encodeURIComponent(revision)+'&reportRevision='+encodeURIComponent(reportRev);
+ const response=await fetch(service+'/api/report-stream?'+args,{
+  headers:{Authorization:'Bearer '+token,Accept:'application/x-ndjson'},
+  credentials:'same-origin',redirect:'error',cache:'no-store'
+ });
+ // Support an older backend during coordinated rollout; never bypass 401/403/409.
+ if(response.status===404)return fetchReportRowsLegacy(args);
+ if(!response.ok){
+  let reason='Impossibile caricare il report.';
+  try{reason=(await response.json()).error||reason}catch{}
+  if(response.status===401)clear();
+  throw Error(reason);
+ }
+ if(!response.body||!response.body.getReader)throw Error('Il browser non supporta il flusso dei dati. Apri SALCheck in un browser aggiornato.');
+ const reader=response.body.getReader(),decoder=new TextDecoder();
+ let pending='',rows=[],done=false;
+ const progress=()=>{
+  $('reportLoading').textContent='Caricamento del report V4: '+rows.length.toLocaleString('it-IT')+' pratiche ricevute…';
+ };
+ function consumeLine(line){
+  if(!line.trim())return;
+  const item=JSON.parse(line);
+  if(item.type==='page'&&Array.isArray(item.rows)){rows.push(...item.rows);progress();return}
+  if(item.type==='complete'&&item.revision===revision&&item.reportRevision===reportRev){done=true;return}
+  throw Error('Il report contiene una revisione inattesa. Ricarica i dati.');
+ }
+ try{
+  while(true){
+   const part=await reader.read();
+   if(part.done)break;
+   pending+=decoder.decode(part.value,{stream:true});
+   let pos;
+   while((pos=pending.indexOf('\n'))>=0){
+    const line=pending.slice(0,pos);pending=pending.slice(pos+1);
+    consumeLine(line);
+   }
+  }
+  pending+=decoder.decode();
+  if(pending.trim())consumeLine(pending);
+  if(!done)throw Error('Caricamento interrotto: nessun report parziale è stato applicato.');
+  return rows;
+ }finally{reader.releaseLock()}
+}
+async function fetchReportRowsLegacy(args){
+ let cursor='',rows=[];
+ do{
+  const result=await request('/api/report?'+args+'&cursor='+encodeURIComponent(cursor));
+  rows.push(...result.rows);
+  cursor=result.next;
+  $('reportLoading').textContent='Caricamento report V4: '+rows.length.toLocaleString('it-IT')+' pratiche…';
+ }while(cursor);
+ return rows;
+}
 async function loadReport(){
- const frame=$('v2Report');if(!frame.contentWindow.SALReport)await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('Il report V2 non si è aperto. Ricarica la pagina.')),15000);frame.addEventListener('load',()=>{clearTimeout(timer);resolve()},{once:true})});
- const report=frame.contentWindow.SALReport;if(!report)throw Error('Report V2 non disponibile.');
- if(reportRevision===(data.reportRevision||data.revision)){report.updateDeclarations(data.declarations||[]);return}
- report.clear();$('reportLoading').hidden=false;let cursor='',rows=[];
- do{const result=await request('/api/report?revision='+encodeURIComponent(data.revision)+'&reportRevision='+encodeURIComponent(data.reportRevision||data.revision)+'&cursor='+encodeURIComponent(cursor));rows.push(...result.rows);cursor=result.next;$('reportLoading').textContent='Caricamento report V2: '+rows.length+' pratiche…'}while(cursor);
- report.mount({rows,declarations:data.declarations||[],source:data.source,user:data.user,onDownload:(bytes,name,type)=>{const blob=new Blob([bytes],{type}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),30000)},onSave:async input=>{await request('/api/declarations',input);await refresh();message('Dichiarazione salvata nello storico condiviso.')}});
- reportRevision=data.reportRevision||data.revision;$('reportLoading').hidden=true;
+ const frame=$('v2Report');
+ if(!frame.contentWindow.SALReport)await new Promise((resolve,reject)=>{
+  const timer=setTimeout(()=>reject(Error('Il report V2 non si è aperto. Ricarica la pagina.')),15000);
+  frame.addEventListener('load',()=>{clearTimeout(timer);resolve()},{once:true});
+ });
+ const report=frame.contentWindow.SALReport;
+ if(!report)throw Error('Report economico non disponibile.');
+ const snapshot=data,revision=snapshot.reportRevision||snapshot.revision;
+ if(reportRevision===revision){report.updateDeclarations(snapshot.declarations||[]);$('reportLoading').hidden=true;return}
+ $('reportLoading').hidden=false;
+ $('reportLoading').textContent='Preparazione report V4…';
+ const rows=await fetchReportRows(snapshot.revision,revision);
+ // The import can change while the stream is in flight: never mount mismatched data.
+ if(data!==snapshot)throw Error('Il CSV è stato aggiornato durante il caricamento: premi Aggiorna.');
+ $('reportLoading').textContent='Elaborazione economica di '+rows.length.toLocaleString('it-IT')+' pratiche…';
+ // Yield so the browser can paint the progress message before the heavy V2 calculation.
+ await new Promise(resolve=>setTimeout(resolve,0));
+ report.mount({rows,declarations:snapshot.declarations||[],source:snapshot.source,user:snapshot.user,
+  onDownload:(bytes,name,type)=>{const blob=new Blob([bytes],{type}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),30000)},
+  onSave:async input=>{await request('/api/declarations',input);await refresh();message('Dichiarazione salvata nello storico condiviso.')}
+ });
+ reportRevision=revision;
+ $('reportLoading').hidden=true;
 }
 async function refresh(){
  data=await request('/api/overview?summary=1');document.body.classList.add('signed-in');$('entry').hidden=true;$('logout').hidden=false;$('workspace').hidden=false;$('identity').textContent=data.user.email+(data.user.role==='manager'?' · Gestione CSV':data.user.role==='director'?' · Direzionale · Sola consultazione':'');$('managerPanel').hidden=data.user.role!=='manager';
  const sites=data.sites.map(label);$('mySites').textContent=data.user.role!=='ra'?'Tutte le sedi pubblicate':sites.length?sites.join(' · '):'Nessuna sede disponibile per la tua email';
  $('source').textContent=data.source?'Aggiornamento: '+date(data.source.publishedAt)+(data.user.role==='manager'?' · '+data.source.source:''):'Nessun CSV ancora pubblicato.';
- renderCases();renderFollowups();await renderHistory();await loadReport();
+ renderCases();if(!$('followupView').hidden)renderFollowups();
+ if(!$('historyView').hidden)await renderHistory();
+ await loadReport();
 }
 $('entry').onsubmit=e=>{e.preventDefault();run(async()=>{const s=await request('/api/session',{email:$('email').value},false);token=s.token;casePage=historyOffset=0;await refresh();message(data.sites.length?(data.user.role==='director'?'Accesso direzionale: tutte le sedi, in sola consultazione.':'Report V2 aggiornato sulle sedi associate alla tua email.'):'Nessuna pratica pubblicata per questa email. Controlla l’indirizzo o attendi il CSV del responsabile.');})};
 $('logout').onclick=()=>run(async()=>{try{await request('/api/logout',{})}finally{clear();message('Sessione chiusa. Lo storico resta salvato.')}});
@@ -53,7 +125,11 @@ $('refresh').onclick=()=>run(async()=>{await refresh();message('Dati aggiornati 
 $('search').oninput=()=>{casePage=0;renderCases()};
 $('casePrevious').onclick=()=>{casePage--;renderCases()};$('caseNext').onclick=()=>{casePage++;renderCases()};
 $('historyPrevious').onclick=()=>run(async()=>{historyOffset=Math.max(0,historyOffset-100);await renderHistory()});$('historyNext').onclick=()=>run(async()=>{if(historyMore){historyOffset+=100;await renderHistory()}});
-document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{document.querySelectorAll('[data-view]').forEach(x=>{x.setAttribute('aria-pressed',String(x===b));$(x.dataset.view).hidden=x!==b})});
+document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{
+ document.querySelectorAll('[data-view]').forEach(x=>{x.setAttribute('aria-pressed',String(x===b));$(x.dataset.view).hidden=x!==b});
+ if(b.dataset.view==='historyView')run(renderHistory);
+ if(b.dataset.view==='followupView')renderFollowups();
+});
 $('cases').onclick=e=>{const button=e.target.closest('[data-save]');if(!button)return;run(async()=>{
  const key=decodeURIComponent(button.dataset.save),r=data.cases.find(x=>x.key===key),tr=button.closest('tr'),status=tr.querySelector('select').value;
  await request('/api/declarations',{key,status,expected:null,notes:tr.querySelector('textarea').value,version:r.declaration?.version||0});await refresh();message('Dichiarazione salvata con data, autore e punto di partenza.');
