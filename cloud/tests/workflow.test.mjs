@@ -210,3 +210,68 @@ test('V4 initial page uses DB dashboard; exact V2 full detail is opt-in or site-
  assert.ok(refresh.includes("if(!$('detailArea').hidden)await loadReport();"));
  assert.equal(refresh.split('\n').filter(line=>line.trim()==='await loadReport();').length,0);
 });
+
+test('V4 operational director: verified owner can read and update every RA, but cannot import or backup',async()=>{
+ const {store:s,db,sql}=fixture();
+ const own=row(600000,ra.email,'OWN');
+ const foreign=row(700000,other.email,'FOREIGN');
+ await publish(s,[own,foreign]);
+ const env={DB:db,SALCHECK_OWNER_EMAIL:manager.email};
+ const identity={userId:'owner-stable-id',email:manager.email};
+ const req=(path,body,token,who=null)=>handle(new Request('https://sal.test/api/'+path,{
+  method:body===undefined?'GET':'POST',
+  headers:{...(body===undefined?{}:{'Content-Type':'application/json'}),
+   ...(token?{Authorization:'Bearer '+token}:{})},
+  body:body===undefined?undefined:JSON.stringify(body)
+ }),env,who);
+ // A user who knows the owner email must never acquire nationwide write access.
+ assert.equal((await req('session',{operational:true,email:manager.email})).status,403);
+ const ordinary=await (await req('session',{email:manager.email})).json();
+ assert.equal(ordinary.user.role,'ra');
+ const ordinaryData=await (await req('overview',undefined,ordinary.token)).json();
+ assert.equal(ordinaryData.sites.length,0);
+ assert.equal((await req('declarations',{key:foreign.key,version:0,status:'SAL da caricare',notes:'No'},ordinary.token)).status,403);
+ const session=await (await req('session',{operational:true},null,identity)).json();
+ assert.equal(session.user.role,'operational_director');
+ assert.equal(session.user.email,manager.email);
+ // Native identity must be validated on every request, not just at session creation.
+ assert.equal((await req('dashboard',undefined,session.token)).status,403);
+ assert.equal((await req('dashboard',undefined,session.token,{userId:'impostor',email:manager.email})).status,403);
+ const all=await (await req('dashboard',undefined,session.token,identity)).json();
+ assert.equal(all.sites[0].practices,2);
+ const report=await (await req('report?revision='+encodeURIComponent(all.revision),undefined,session.token,identity)).json();
+ assert.equal(report.rows.length,2);
+ const edited=await req('declarations',{key:foreign.key,version:0,status:'SAL da caricare',notes:'Verificata dalla direzione'},session.token,identity);
+ assert.equal(edited.status,200);
+ const record=await edited.json();
+ assert.equal(record.ra,other.email);
+ assert.equal(record.actor,manager.email);
+ assert.equal(record.promise.expected,300000);
+ const visible=await (await req('overview',undefined,session.token,identity)).json();
+ assert.equal(visible.declarations.length,1);
+ assert.equal(visible.declarations[0].ra,other.email);
+ assert.equal((await req('archive',{key:foreign.key,version:record.version},session.token,identity)).status,200);
+ const history=await (await req('history',undefined,session.token,identity)).json();
+ assert.ok(history.entries.some(x=>x.event==='archive'));
+ assert.equal((await req('imports',{source:'no.csv',count:1,baseRevision:all.revision},session.token,identity)).status,403);
+ assert.equal((await req('backup',undefined,session.token,identity)).status,403);
+ const importLog=await req('import-log',undefined,session.token,identity);
+ assert.equal(importLog.status,200);
+ assert.ok((await importLog.json()).items.length>=1);
+ assert.equal((await s.revision()),all.revision);
+ assert.equal(sql.prepare('SELECT COUNT(*) AS n FROM current_rows').get().n,2);
+});
+test('V4 verified operational direction route is distinct from email-only direction and CSV management',()=>{
+ const access=readFileSync(new URL('../lib/access.mjs',import.meta.url),'utf8');
+ const api=readFileSync(new URL('../lib/api.mjs',import.meta.url),'utf8');
+ const app=readFileSync(new URL('../public/app.js',import.meta.url),'utf8');
+ const html=readFileSync(new URL('../public/workspace.html',import.meta.url),'utf8');
+ const route=readFileSync(new URL('../app/direzione/page.tsx',import.meta.url),'utf8');
+ assert.ok(access.includes("user.role==='operational_director'"));
+ assert.ok(api.includes("privileged?identity.userId:null"));
+ assert.ok(api.includes("user.role==='manager'||user.role==='operational_director'"));
+ assert.ok(app.includes("data.user.role==='operational_director'"));
+ assert.ok(html.includes('href="/direzione"'));
+ assert.ok(route.includes("requireChatGPTUser('/direzione')"));
+ assert.ok(route.includes("redirect('/workspace.html?direzione=1')"));
+});
