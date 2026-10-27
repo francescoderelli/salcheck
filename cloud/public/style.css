@@ -3,3 +3,34 @@ label{display:block;font-weight:650;margin:10px 0 5px}.entry-row{display:flex;ga
 .backup-actions{display:flex;gap:10px;flex-wrap:wrap}hr{border:0;border-top:1px solid #e4edf4;margin:26px 0}#backupStatus{font-size:13px}a.link-button{text-decoration:underline}
 
 #v2Report{width:100%;border:0;display:block;min-height:650px}#reportView{margin:20px 0}.signed-in #entryIntro{display:none}.signed-in .intro{padding:0 0 10px}.signed-in #message{margin:6px 0}#managerPanel details summary{cursor:pointer;font-size:15px;font-weight:650;color:#245574}#managerPanel{padding:15px 22px!important}#managerPanel details[open] summary{margin-bottom:20px}.signed-in .views{margin:20px 0}
+
+/* V4 shell: reuse the same visual language as the original V2 report. */
+body{font:14px/1.45 Inter,system-ui,-apple-system,Segoe UI,Arial,sans-serif;background:#f1f5f9;color:#18304a}
+.top{background:#112942;color:#f9fbff;padding:18px clamp(14px,1.5vw,32px);box-shadow:0 4px 18px #091c3159;gap:18px}
+.brand{display:flex;align-items:center;gap:13px}
+.brand-icon{background:#1e76af;color:white;width:43px;height:43px;border-radius:13px;display:grid;place-items:center;font-weight:850;font-size:26px}
+.top .brand strong{font-size:24px;letter-spacing:-1px}
+.top .brand strong span{font-size:12px;background:#2d6588;border-radius:6px;padding:3px 6px;vertical-align:middle;margin-left:2px;color:#eaf6ff}
+.brand small{display:block;font-size:11px;color:#b8cbdc;letter-spacing:.01em}
+.top-status{font-size:12px;color:#b9d7e3;text-align:right;overflow-wrap:anywhere}
+main{padding:24px clamp(14px,1.5vw,32px)}
+.intro.hero{margin:0 0 16px;padding:28px 2px 18px;max-width:none}
+.hero h1{font-size:clamp(27px,3vw,39px);letter-spacing:-.05em;line-height:1.12;margin-bottom:15px}
+.hero p:not(.eyebrow){font-size:15px;max-width:740px}
+.eyebrow{letter-spacing:.12em;font-weight:750;color:#357ba8;font-size:10px}
+#entry{max-width:720px;background:#fff;border:1px solid #dce6ef;border-radius:14px;padding:19px 22px;box-shadow:0 3px 18px #1234510b}
+#entry label{color:#668098;font-size:11px;letter-spacing:.07em;text-transform:uppercase}
+#entry input{border:1px solid #cedce8}
+#entry button,.views button[aria-pressed=true]{background:#153f62;color:#fff;border-color:#153f62}
+section:not(.intro){border-color:#dce6ef;box-shadow:0 3px 18px #12345108}
+.source{background:#e3edf6;color:#456a85;border:1px solid #d1dfec}
+.views button{border-radius:9px;font-weight:700;font-size:13px}
+.views button[aria-pressed=false]{background:#f3f7fa;color:#3d5d77;border-color:#d7e3ec}
+.views button[aria-pressed=false]:hover{background:#dfeef8}
+button:not(:disabled):hover{filter:brightness(.96)}
+.loading-progress{position:relative;border:1px solid #d0e0ed;background:#e8f3fb;color:#205875;border-radius:11px;padding:15px 20px 15px 44px;min-height:48px;font-weight:650}
+.loading-progress::before{content:'';position:absolute;left:17px;top:17px;width:15px;height:15px;border:2px solid #96c4e3;border-top-color:#176ca4;border-radius:50%;animation:salcheck-v4-spin .8s linear infinite}
+@keyframes salcheck-v4-spin{to{transform:rotate(360deg)}}
+#v2Report{background:#f1f5f9;border:0;width:100%;display:block}
+#followupPage{font-variant-numeric:tabular-nums}
+@media(max-width:700px){.top{align-items:flex-start}.top-status{text-align:left}.brand-icon{width:37px;height:37px}.top .brand strong{font-size:21px}#entry{padding:14px}.intro.hero{padding:22px 0 10px}}
