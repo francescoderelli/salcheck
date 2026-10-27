@@ -64,6 +64,10 @@ export async function handle(request,env,identity){
     return new Response(stream,{headers:{...headers,'Content-Type':'application/x-ndjson; charset=utf-8','X-Content-Type-Options':'nosniff'}});
    }
    if(path==='/api/report')return json(await store.report(user,{cursor:url.searchParams.get('cursor')||'',revision:url.searchParams.get('revision')||'',reportRevision:url.searchParams.get('reportRevision')||undefined}));
+   if(path==='/api/import-log'){
+    const offset=Number(url.searchParams.get('offset')||0);
+    return json(await store.importLog(user,offset));
+   }
    if(path==='/api/history'){const offset=Number(url.searchParams.get('offset')||0);if(!Number.isSafeInteger(offset)||offset<0||offset>1000000)fail(400,'Pagina non valida.');return json(await store.history(user,offset))}
    if(path==='/api/backup'){
     store.manager(user);const iterator=store.backup(user),encoder=new TextEncoder();
