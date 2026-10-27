@@ -3,7 +3,7 @@ const $=id=>document.getElementById(id),esc=s=>String(s??'').replace(/[&<>"']/g,
 const euro=n=>n===null||n===undefined?'—':new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR'}).format(n/100),date=s=>s?new Date(s).toLocaleString('it-IT'):'—';
 const label=s=>s==='EDAC_BS'?'Brescia 1':s==='EDAC_BS2'?'Brescia 2':s;
 const outcomes=['Da verificare','SAL da caricare','Già registrato','Lavoro non eseguito','Acconto','Da approfondire','Da escludere'];
-let token='',data,managerMode=false,busy=false,casePage=0,followupPage=0,historyOffset=0,historyMore=false,service,reportRevision=null;
+let token='',data,managerMode=false,busy=false,casePage=0,followupPage=0,historyOffset=0,historyMore=false,uploadOffset=0,uploadMore=false,service,reportRevision=null;
 function message(s){$('message').textContent=s}
 function clear(){token='';data=null;reportRevision=null;document.body.classList.remove('signed-in');$('v2Report').contentWindow.SALReport?.clear();document.querySelectorAll('[data-view]').forEach(x=>{x.setAttribute('aria-pressed',String(x.dataset.view==='reportView'));$(x.dataset.view).hidden=x.dataset.view!=='reportView'});$('workspace').hidden=true;$('entry').hidden=false;$('logout').hidden=true;$('identity').textContent='Responsabili Area';$('cases').replaceChildren();$('followups').replaceChildren();$('history').replaceChildren();}
 async function run(fn){if(busy)return;busy=true;$('workspace').inert=true;$('entry').inert=true;try{await fn()}catch(e){message(e.message||'Operazione non riuscita.')}finally{busy=false;$('workspace').inert=false;$('entry').inert=false}}
@@ -34,6 +34,14 @@ function renderFollowups(){
  $('followups').innerHTML=visible.map(x=>{
   const d=x.declaration;return `<tr><td><b>${esc(label(d.site))}</b><br>${esc(d.code)}${data.user.role!=='ra'?'<br>'+esc(d.ra):''}</td><td>${esc(date(d.promise.at))}</td><td class="num">${euro(d.promise.baseline)}</td><td class="num">${euro(d.promise.expected)}</td><td class="num">${euro(x.product)}</td><td class="num">${euro(x.delta)}</td><td class="num">${euro(x.remaining)}</td><td><b>${esc(x.status)}</b><br><span class="small">Dichiarazione: ${esc(d.status)}</span>${data.user.role==='manager'&&!d.promise.closedAt?`<br><button class="secondary" data-archive="${esc(encodeURIComponent(d.key))}">Chiudi impegno</button>`:''}</td></tr>`;
  }).join('')||'<tr><td colspan="8" class="empty">Nessun SAL ancora dichiarato.</td></tr>';
+}
+async function renderUploads(){
+ const result=await request('/api/import-log?offset='+uploadOffset);
+ uploadMore=result.hasMore;
+ $('uploadPage').textContent='Pagina '+(uploadOffset/50+1);
+ $('uploadPrevious').disabled=uploadOffset===0;
+ $('uploadNext').disabled=!uploadMore;
+ $('uploads').innerHTML=result.items.map(x=>'<tr><td>'+esc(date(x.publishedAt))+'</td><td>'+esc(x.kind)+'</td><td>'+esc(x.source)+'</td><td>'+esc(x.owner)+'</td><td class="num">'+Number(x.count||0).toLocaleString('it-IT')+'</td></tr>').join('')||'<tr><td colspan="5" class="empty">Nessuna importazione pubblicata.</td></tr>';
 }
 async function renderHistory(){
  const h=await request('/api/history?offset='+historyOffset);historyMore=h.hasMore;
@@ -121,24 +129,27 @@ async function loadReport(){
  $('reportLoading').hidden=true;
 }
 async function refresh(){
- data=await request('/api/overview?summary=1');document.body.classList.add('signed-in');$('entry').hidden=true;$('logout').hidden=false;$('workspace').hidden=false;$('identity').textContent=data.user.email+(data.user.role==='manager'?' · Gestione CSV':data.user.role==='director'?' · Direzionale · Sola consultazione':'');$('managerPanel').hidden=data.user.role!=='manager';
+ data=await request('/api/overview?summary=1');document.body.classList.add('signed-in');$('entry').hidden=true;$('logout').hidden=false;$('workspace').hidden=false;$('identity').textContent=data.user.email+(data.user.role==='manager'?' · Gestione CSV':data.user.role==='director'?' · Direzionale · Sola consultazione':'');$('managerPanel').hidden=data.user.role!=='manager';$('uploadsNav').hidden=data.user.role==='ra';
  const sites=data.sites.map(label);$('mySites').textContent=data.user.role!=='ra'?'Tutte le sedi pubblicate':sites.length?sites.join(' · '):'Nessuna sede disponibile per la tua email';
  $('source').textContent=data.source?'Aggiornamento: '+date(data.source.publishedAt)+(data.user.role==='manager'?' · '+data.source.source:''):'Nessun CSV ancora pubblicato.';
  renderCases();if(!$('followupView').hidden)renderFollowups();
- if(!$('historyView').hidden)await renderHistory();
+ if(!$('historyView').hidden)await renderHistory();if(!$('uploadsView').hidden)await renderUploads();
  await loadReport();
 }
-$('entry').onsubmit=e=>{e.preventDefault();run(async()=>{const s=await request('/api/session',{email:$('email').value},false);token=s.token;casePage=followupPage=historyOffset=0;await refresh();message(data.sites.length?(data.user.role==='director'?'Accesso direzionale: tutte le sedi, in sola consultazione.':'Report V2 aggiornato sulle sedi associate alla tua email.'):'Nessuna pratica pubblicata per questa email. Controlla l’indirizzo o attendi il CSV del responsabile.');})};
+$('entry').onsubmit=e=>{e.preventDefault();run(async()=>{const s=await request('/api/session',{email:$('email').value},false);token=s.token;casePage=followupPage=historyOffset=uploadOffset=0;await refresh();message(data.sites.length?(data.user.role==='director'?'Accesso direzionale: tutte le sedi, in sola consultazione.':'Report V2 aggiornato sulle sedi associate alla tua email.'):'Nessuna pratica pubblicata per questa email. Controlla l’indirizzo o attendi il CSV del responsabile.');})};
 $('logout').onclick=()=>run(async()=>{try{await request('/api/logout',{})}finally{clear();message('Sessione chiusa. Lo storico resta salvato.')}});
 $('refresh').onclick=()=>run(async()=>{await refresh();message('Dati aggiornati dall’archivio condiviso.')});
 $('search').oninput=()=>{casePage=0;renderCases()};
 $('casePrevious').onclick=()=>{casePage--;renderCases()};$('caseNext').onclick=()=>{casePage++;renderCases()};
 $('followupPrevious').onclick=()=>{followupPage=Math.max(0,followupPage-1);renderFollowups()};
 $('followupNext').onclick=()=>{followupPage++;renderFollowups()};
+$('uploadPrevious').onclick=()=>run(async()=>{uploadOffset=Math.max(0,uploadOffset-50);await renderUploads()});
+$('uploadNext').onclick=()=>run(async()=>{if(uploadMore){uploadOffset+=50;await renderUploads()}});
 $('historyPrevious').onclick=()=>run(async()=>{historyOffset=Math.max(0,historyOffset-100);await renderHistory()});$('historyNext').onclick=()=>run(async()=>{if(historyMore){historyOffset+=100;await renderHistory()}});
 document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{
  document.querySelectorAll('[data-view]').forEach(x=>{x.setAttribute('aria-pressed',String(x===b));$(x.dataset.view).hidden=x!==b});
  if(b.dataset.view==='historyView')run(renderHistory);
+ if(b.dataset.view==='uploadsView')run(renderUploads);
  if(b.dataset.view==='followupView')renderFollowups();
 });
 $('cases').onclick=e=>{const button=e.target.closest('[data-save]');if(!button)return;run(async()=>{
