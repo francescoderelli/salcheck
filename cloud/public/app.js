@@ -150,7 +150,7 @@ function renderFastDashboard(result){
    '<td>'+esc(network==='IT-Franchising'?'Franchising':'Diretta')+'</td><td class="num">'+prettyCount(x.practices)+'</td>'+
    '<td class="num">'+fastMoney(x.fullSal)+'</td><td class="num">'+range+'</td></tr>';
  }).join('')||'<tr><td colspan="5" class="empty">Nessuna pratica pubblicata per questo accesso.</td></tr>';
- $('v4Dashboard').hidden=false;
+ $('v4Dashboard').hidden=!$('detailArea').hidden;
 }
 async function showDetailedReport(site='',network=''){
  // No database-wide row transfer is started until the user explicitly opens the detailed view.
