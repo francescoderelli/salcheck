@@ -100,3 +100,11 @@
 body{background:transparent}main{max-width:none;padding:0}.ra-tools{display:none}.cloud-review{display:grid;gap:6px;min-width:190px}.cloud-review input,.cloud-review textarea{box-sizing:border-box;width:100%;font:inherit;border:1px solid #bfd0df;border-radius:5px;padding:7px}.cloud-review label{font-size:11px;color:#516f89}.cloud-review textarea{min-height:42px}.cloud-review button{justify-self:start}.cloud-review .hint{white-space:normal}.cloud-review select{width:100%}#reportNotice{margin:0 0 15px}[hidden]{display:none!important}
 
 .detail-table td:first-child .original{white-space:normal;max-width:260px;overflow-wrap:anywhere;line-height:1.4;margin-top:3px}
+
+/* Export RA: prioritize the shareable view; keep the technical workbook available. */
+.export-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.export-recipient-label{display:flex;align-items:center;gap:7px;font-weight:700;font-size:12px;color:#506c82;white-space:nowrap}
+.export-recipient-label select{min-width:190px;max-width:270px;padding:9px;border:1px solid #cddfed;background:#fff;border-radius:8px;color:#173b55}
+.export-actions #exportRA{font-weight:750}
+.export-actions #exportExcel{font-size:12px}
+@media(max-width:750px){.export-actions{width:100%;justify-content:flex-start}.export-recipient-label{width:100%;align-items:flex-start;flex-wrap:wrap}.export-recipient-label select{flex:1;min-width:160px}.export-actions button{flex:1}}
