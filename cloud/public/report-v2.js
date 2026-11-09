@@ -241,7 +241,7 @@ function selectScenario(r){
  '<option value="">— IVA da verificare (intervallo) —</option>'+
  r.scenarios.map(s=>'<option value="'+esc(s.fx)+'" '+(chosen?.fx===s.fx?'selected':'')+'>'+esc(ivaLabel(s.fx))+' · SAL '+euroC(s.gap)+'</option>').join('')+'</select>';
 }
-let cloudDeclarations=new Map(),drafts=new Map(),cloudSave=null,cloudDownload=null,cloudReadOnly=false;
+let cloudDeclarations=new Map(),drafts=new Map(),cloudSave=null,cloudDownload=null,cloudReadOnly=false,exportSource=null;
 function draftFor(r){
  if(!drafts.has(r.key)){const d=cloudDeclarations.get(r.key),p=d?.promise&&!d.promise.closedAt?d.promise:null;drafts.set(r.key,{status:d?.status||'Da verificare',notes:d?.notes||'',version:d?.version||0})}
  return drafts.get(r.key);
@@ -260,7 +260,7 @@ function renderDetails(){
   :(focus?'Dettaglio della sede '+idToCode(focus):'Esamina le commesse della rete e verifica manualmente gli importi.');
  const validSortKeys=tab==='partial-sal'?['venduto','prodotto','fatturato','incassato','taxBase','simSal']:['venduto','prodotto','fatturato','incassato','taxBase','remaining'];
  if(detailSort.key&&!validSortKeys.includes(detailSort.key))detailSort={key:'',dir:'asc'};
- currentRows=currentDetail();const pages=Math.max(1,Math.ceil(currentRows.length/PAGE));page=Math.max(0,Math.min(page,pages-1));
+ currentRows=currentDetail();refreshRARecipient();const pages=Math.max(1,Math.ceil(currentRows.length/PAGE));page=Math.max(0,Math.min(page,pages-1));
  $('detailCount').textContent=number(currentRows.length)+(currentRows.length===1?' commessa':' commesse')+(bankRate?' · Ritenuta '+(bankRate==='none'?'non riconosciuta':bankRate+'%'):'')+(currentRows.some(isExcluded)?' · '+number(currentRows.filter(isExcluded).length)+' escluse/acconti, ancora visibili':'');$('pageInfo').textContent=(page+1)+' / '+pages;$('prev').disabled=page===0;$('next').disabled=page>=pages-1;
  const headers=[
   {label:'Commessa'},{label:'Anno delibera'},{label:'Sede'},{label:'Rete'},{label:'Stato (info)'},
@@ -344,6 +344,68 @@ function downloadCSV(){
  const data=exportRows(currentRows);if(!data.length){err('Nessuna pratica da esportare con i filtri correnti.');return}
  const cols=Object.keys(data[0]),lines=[cols.map(csvSafe).join(';'),...data.map(x=>cols.map(k=>csvSafe(x[k])).join(';'))];
  cloudDownload('\ufeff'+lines.join('\r\n'),'SALCheck_V2_'+tab+'.csv','text/csv;charset=utf-8');
+}
+
+// Dedicated offline RA workbook: same visible V2 economic values with fewer columns.
+// The full audit workbook remains unchanged in downloadXlsx().
+function exportScopeRows(){
+ return activeRows.filter(r=>!focus||r.siteKey===focus);
+}
+function refreshRARecipient(){
+ if(!book||!window.SALRAExport)return;
+ const selector=$('exportRecipient');
+ if(!selector)return;
+ const addresses=window.SALRAExport.recipients(exportScopeRows());
+ const before=selector.value;
+ selector.replaceChildren();
+ const placeholder=document.createElement('option');
+ placeholder.value='';placeholder.textContent=addresses.length>1?'Scegli RA destinatario…':'Nessun RA disponibile';
+ selector.appendChild(placeholder);
+ for(const email of addresses){const opt=document.createElement('option');opt.value=email;opt.textContent=email;selector.appendChild(opt)}
+ const next=addresses.includes(before)?before:addresses.length===1?addresses[0]:'';
+ selector.value=next;
+ selector.disabled=!addresses.length;
+ $('exportRA').disabled=!addresses.length;
+}
+function downloadRaXlsx(){
+ if(!window.XLSX||!window.SALRAExport){err('Il modulo del report RA non è disponibile. Ricarica la pagina.');return}
+ const helper=window.SALRAExport,recipient=$('exportRecipient').value;
+ if(!recipient){err('Seleziona la email del RA destinatario prima di esportare. Il file non deve contenere pratiche di altri RA.');return}
+ const scopeRows=exportScopeRows();
+ const scoped=helper.filterRecipient(scopeRows,recipient);
+ if(!scoped.length){err('Non ci sono pratiche per il RA scelto nel perimetro attuale.');return}
+ const projected=r=>{
+  const selected=selectedScenario(r),base=taxableBase(r);
+  const range=r.partial?simulatedRange(r):r.fullSal?{min:r.remaining,max:r.remaining}:null;
+  const iva=r.partial?(selected?ivaLabel(selected.fx):'Da verificare – intervallo'):r.coefficient?ivaLabel(r.coefficient):'Da verificare';
+  return helper.visibleRecord(r,{iva,taxable:base,range,saved:cloudDeclarations.get(r.key)||null});
+ };
+ const bySite=new Map();
+ for(const row of scoped){if(!bySite.has(row.siteKey))bySite.set(row.siteKey,[]);bySite.get(row.siteKey).push(row)}
+ const sites=[...bySite.values()].map(rows=>{
+  const t=financialSummary(rows),r=rows[0];
+  return {site:r.site,network:r.network,practices:t.practices,fullSal:t.fullSal,pMin:t.pMin,pMax:t.pMax}
+ }).sort((a,b)=>b.fullSal-a.fullSal||b.pMax-a.pMax||a.site.localeCompare(b.site));
+ const full=scoped.filter(r=>r.fullSal).sort((a,b)=>b.remaining-a.remaining||a.code.localeCompare(b.code)).map(projected);
+ const partial=scoped.filter(r=>r.partial).sort((a,b)=>simulatedRange(b).max-simulatedRange(a).max||a.code.localeCompare(b.code)).map(projected);
+ // currentRows is already the exact visible tab, search, IVA and bank-rate filtering, across ALL pages.
+ const visible=currentRows.filter(r=>r.ra?.trim().toLowerCase()===recipient).map(projected);
+ const summary=financialSummary(scoped);
+ const date=new Date(),scopeDescription=[
+  TAB_LABELS[tab],focus?'Sede '+idToCode(focus):'Sedi selezionate',
+  network==='all'?'Dirette e franchising':network==='IT-Franchising'?'Franchising':'Dirette',
+  selectedMacroarea?'Macroarea '+selectedMacroarea:'',
+  selectedYear?'Anno '+selectedYear:''
+ ].filter(Boolean).join(' · ');
+ const wb=helper.makeWorkbook(window.XLSX,{
+  recipient,summary,sites,visible,full,partial,viewLabel:scopeDescription,
+  source:exportSource?.source||fileName||'Albert',
+  generatedAt:date.toLocaleString('it-IT')
+ });
+ cloudDownload(window.XLSX.write(wb,{bookType:'xlsx',type:'array'}),
+  'SALCheck_RA_'+helper.safeName(recipient)+'_'+date.toISOString().slice(0,10)+'.xlsx',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+ err('');
 }
 
 function downloadXlsx(){
@@ -431,7 +493,8 @@ $('detailTable').onclick=async e=>{
  try{await cloudSave({key,...draft,iva});drafts.delete(key);renderAll();err('');}
  catch(e){err(e.message||'Salvataggio non riuscito. Le modifiche non sono confermate.');b.disabled=false}
 };
-$('exportCSV').onclick=()=>{try{downloadCSV()}catch(e){err('Esportazione CSV non riuscita: '+e.message)}};$('exportExcel').onclick=()=>{try{downloadXlsx()}catch(e){err('Esportazione Excel non riuscita: '+e.message)}};
+$('exportCSV').onclick=()=>{try{downloadCSV()}catch(e){err('Esportazione CSV non riuscita: '+e.message)}};$('exportExcel').onclick=()=>{try{downloadXlsx()}catch(e){err('Esportazione Excel tecnico non riuscita: '+e.message)}};
+$('exportRA').onclick=()=>{try{downloadRaXlsx()}catch(e){err('Esportazione report RA non riuscita: '+e.message)}};
 function applyDeclarations(declarations){
  cloudDeclarations=new Map(declarations.map(d=>[d.key,d]));review=new Map();raFeedback=new Map();
  for(const d of declarations){review.set(d.key,d.status);raFeedback.set(d.key,{status:d.status,sal:d.promise?d.promise.expected/100:null,notes:d.notes,at:d.updatedAt})}
@@ -439,7 +502,7 @@ function applyDeclarations(declarations){
 }
 window.SALReport={
  mount({rows,declarations,source,user,onSave,onDownload}){
-  cloudReadOnly=user.role==='director';cloudSave=cloudReadOnly?null:onSave;cloudDownload=onDownload;drafts.clear();applyDeclarations(declarations);const raw=fx.store();rows.forEach(r=>raw.addGroup(r));
+  cloudReadOnly=user.role==='director';cloudSave=cloudReadOnly?null:onSave;cloudDownload=onDownload;exportSource=source||null;drafts.clear();applyDeclarations(declarations);const raw=fx.store();rows.forEach(r=>raw.addGroup(r));
   book={...raw.finalize(settings()),sourceStore:raw};rowLookup=new Map(book.rows.map(r=>[r.key,r]));restoreScenarios(book.rows);
   fileName=user.role!=='ra'?(source?.source||'Report'):('Mie_sedi');
   network='all';scope='all';selectedSites.clear();selectedMacroarea='';selectedYear='';siteSearchTerm='';focus='';tab='full-sal';term='';coefficient='';bankRate='';page=0;
@@ -452,7 +515,7 @@ window.SALReport={
   $('fileScopeNote').textContent='Perimetro delle sole sedi autorizzate per questo accesso · '+number(rows.length)+' pratiche. Gli importi sono quelli del CSV pubblicato.';
  },
  updateDeclarations(declarations){applyDeclarations(declarations);if(book)renderAll()},
- clear(){book=null;rowLookup.clear();cloudDeclarations.clear();drafts.clear();review.clear();raFeedback.clear();$('dashboard').hidden=true;$('detailTable').replaceChildren();$('siteTable').replaceChildren();$('reportNotice').hidden=true;err('')}
+ clear(){book=null;rowLookup.clear();cloudDeclarations.clear();drafts.clear();review.clear();raFeedback.clear();exportSource=null;$('dashboard').hidden=true;$('detailTable').replaceChildren();$('siteTable').replaceChildren();$('reportNotice').hidden=true;err('')}
 };
 new ResizeObserver(()=>parent.postMessage({type:'sal-report-height',height:Math.ceil(document.body.getBoundingClientRect().height)},location.origin)).observe(document.body);
 })();
