@@ -91,3 +91,25 @@ La prima V4 ottimizzava il trasporto delle pratiche con un singolo streaming NDJ
 7. Verificare che `SALCHECK_OWNER_EMAIL` e lo stato `owner_id` del database esistente restino invariati durante il deploy: nessun reset.
 
 **Non pubblicare direttamente un ramo precedentemente distribuito**: aggiornare lo stesso progetto Sites con l'HEAD di `salcheck-v4` e mantenere D1 esistente.
+
+## Nuovo Excel sintetico da inviare agli RA — 9 novembre 2026
+
+Nel report economico V2 dentro la V4 (dopo avere aperto una sede o il dettaglio nazionale) compaiono:
+- **Destinatario RA**: menu delle email RA presenti nelle sole pratiche del perimetro di pagina, con selezione obbligatoria se sono presenti più RA. Il file è sempre filtrato per **email esatta**, applicata a ogni riga.
+- **Excel da inviare agli RA**: esporta un unico XLSX compatto con quattro schede: `Riepilogo` (KPI V2 e classifica sedi), `Vista attuale` (stessa scheda e ricerca/filtri IVA e banca visibili, **tutte** le righe filtrate, non soltanto la pagina a video), `SAL fatture complete` e `SAL incassi parziali`.
+- **Excel tecnico completo**: lascia attiva e invariata l'esportazione precedente con tutte le colonne, schede e dati di audit.
+- **Scarica CSV filtrato**: invariato.
+
+### Contenuto del report RA
+Le singole pratiche hanno **16 colonne** rispetto al tracciato tecnico, organizzate come la tabella V2: commessa, indirizzo, anno, sede, stato, venduto, prodotto, fatturato, incassato, IVA fattura, imponibile, SAL teorico minimo, SAL teorico massimo, esito salvato, verifica RA da compilare, note RA da compilare. Quando il SAL è determinato, il minimo coincide col massimo; negli incassi parziali senza scelta IVA viene esportato l'intervallo. Importi in euro numerici e filtri Excel, larghezze leggibili. Il primo foglio contiene i KPI e le sedi del solo RA selezionato.
+
+**Precauzioni fondamentali:** la colonna email RA dell'Albert deve individuare un RA unico; pratiche con attribuzione incerta non sono esportate automaticamente a destinatari estranei. Il report Excel è una copia **offline** e le risposte inserite dagli RA non sono sincronizzate automaticamente con le dichiarazioni cloud. Le opzioni IVA simulate nel browser possono essere riportate come ipotesi, non come fatto accertato. La data del file non sostituisce la data del CSV.
+
+### Verifiche già presenti in GitHub Actions
+- Esportazione limitata alle sole righe dell'RA scelto (nessun codice commessa o email di altri RA).
+- Nuovo XLSX generato e riletto con la libreria Excel inclusa nel progetto (SheetJS), presenza di quattro fogli, importi numerici corretti, filtro automatico e colonne.
+- Il vecchio Excel completo, calcoli V2, sessioni, backup e storico rimangono invariati.
+- Eseguire `node --test tests/*.test.mjs` (non soltanto `workflow.test.mjs`) sul branch aggiornato.
+
+### Check per Work prima della pubblicazione
+Apri Gestione, entra nel report economico e seleziona una sede con una o più pratiche RA; controlla il menu destinatario e scarica il file. Apri in Excel per verificare KPI, filtro, IVA, importi e campi compilabili. Ripeti su una vista con due RA e controlla che **nessuna pratica dell'altro RA** finisca nell'XLSX. Il vecchio pulsante **Excel tecnico completo** deve scaricare ancora l'export tecnico originario. Non caricare file RA o documenti con dati reali su GitHub. Mantieni le tabelle D1, i dati e i permessi invariati.
