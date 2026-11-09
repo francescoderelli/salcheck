@@ -21,7 +21,7 @@ jobs:
           node-version: '24'
       - name: Test V2 economic engine, RA access and V4 history/streaming
         working-directory: cloud
-        run: node --test tests/workflow.test.mjs
+        run: node --test tests/*.test.mjs
       - name: Check JavaScript module syntax
         working-directory: cloud
         run: |
